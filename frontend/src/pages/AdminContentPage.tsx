@@ -10,6 +10,7 @@ const resources = [
   "lessons",
   "lesson-blocks",
   "questions",
+  "question-options",
   "concept-tags"
 ];
 
@@ -78,6 +79,13 @@ const samples: Record<string, Record<string, unknown>> = {
       { label: "A", text: "Incorrect", is_correct: false, explanation: "This misses the concept." },
       { label: "B", text: "Correct", is_correct: true, explanation: "This matches the concept." }
     ]
+  },
+  "question-options": {
+    question_id: 1,
+    label: "C",
+    text: "Additional option",
+    is_correct: false,
+    explanation: "This is a placeholder wrong option."
   }
 };
 

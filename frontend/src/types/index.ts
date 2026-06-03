@@ -249,6 +249,7 @@ export interface SearchResultItem {
 
 export interface SearchResponse {
   query: string;
+  concept_tags: SearchResultItem[];
   lessons: SearchResultItem[];
   questions: SearchResultItem[];
   debug_tasks: SearchResultItem[];

@@ -2,17 +2,20 @@
 
 Backend Mastery System is a skill-based learning platform that verifies understanding, not just content completion.
 
-This base MVP includes:
+The MVP is a learning engine foundation: taxonomy, auth, proof-of-understanding progress, feedback, review scheduling, search across practice surfaces, and simple admin content management.
 
-- FastAPI backend with JWT auth, roles, SQLAlchemy models, seed data, OpenAPI docs, and pytest tests.
-- PostgreSQL-ready schema with a SQLite fallback for quick local development.
-- React + TypeScript + Vite frontend with Tailwind CSS.
-- Dashboard, skill map, module detail, lesson flow, question feedback, review queue, search, and simple admin content base.
+## Stack
+
+- Backend: FastAPI, SQLAlchemy, Alembic, JWT auth
+- Database: PostgreSQL-ready, SQLite fallback for local development
+- Frontend: React, TypeScript, Vite, Tailwind CSS
+- Tests: pytest
 
 ## Project Structure
 
 ```text
 backend/
+  alembic/
   app/
     api/routes/
     core/
@@ -40,31 +43,64 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env
+python -m alembic upgrade head
 python -m app.seed
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-API docs will be available at:
+API docs:
 
-- http://localhost:8000/docs
-- http://localhost:8000/openapi.json
+- http://127.0.0.1:8001/docs
+- http://127.0.0.1:8001/openapi.json
 
-Sample seeded accounts:
+The backend now uses Alembic for schema setup. `AUTO_CREATE_TABLES=false` is the default. Set it to `true` only as a temporary local fallback.
 
-- Admin: `admin@example.com` / `admin123`
-- Learner: `learner@example.com` / `learner123`
+## Database
 
-The backend defaults to SQLite for a no-friction local run. To use PostgreSQL, set `DATABASE_URL` in `backend/.env`, for example:
+SQLite local default:
+
+```env
+DATABASE_URL=sqlite:///./backend_mastery_dev.db
+```
+
+Optional PostgreSQL with Docker:
+
+```bash
+docker compose up -d db
+```
+
+Then use:
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/backend_mastery
 ```
+
+Apply migrations after changing the database URL:
+
+```bash
+cd backend
+python -m alembic upgrade head
+python -m app.seed
+```
+
+Reset local seed data:
+
+```bash
+cd backend
+python -m app.seed --reset
+```
+
+## Seed Accounts
+
+- Admin: `admin@example.com` / `admin123`
+- Learner: `learner@example.com` / `learner123`
 
 ## Frontend Setup
 
 ```bash
 cd frontend
 npm install
+copy .env.example .env
 npm run dev
 ```
 
@@ -72,31 +108,40 @@ Frontend dev server:
 
 - http://localhost:5173
 
-If your API runs somewhere else, set:
+For the local backend on port 8001, set:
 
 ```env
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://127.0.0.1:8001
 ```
 
-## Optional PostgreSQL With Docker
+## Tests and Build
 
-```bash
-docker compose up -d db
-```
-
-Then set the backend `DATABASE_URL` to the PostgreSQL URL shown above and run:
+Backend tests:
 
 ```bash
 cd backend
-python -m app.seed
-uvicorn app.main:app --reload
+python -m pytest
 ```
 
-## Tests
+Frontend build:
 
 ```bash
-cd backend
-pytest
+cd frontend
+npm run build
 ```
 
-The tests cover auth, reading-only progress behavior, wrong-answer feedback, and review scheduling.
+Frontend dependency audit:
+
+```bash
+cd frontend
+npm audit
+```
+
+## Common Errors
+
+- `Port 8000 already in use`: run the backend on `8001` as shown above.
+- `no such table`: run `python -m alembic upgrade head`, then `python -m app.seed`.
+- `401 Unauthorized`: log in again or clear the frontend token from local storage.
+- `403 Forbidden` on `/admin/*`: use the seeded admin account.
+- Frontend cannot reach API: check `frontend/.env` and make sure `VITE_API_BASE_URL=http://127.0.0.1:8001`.
+- Duplicate seed data: use `python -m app.seed --reset` for local development reset.

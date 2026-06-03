@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import argparse
+
 from sqlalchemy import select
 
 from app.core.security import get_password_hash
@@ -384,5 +386,16 @@ def _add_lesson(
     return lesson
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Seed local Backend Mastery data.")
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Drop all tables before recreating schema and sample seed data.",
+    )
+    args = parser.parse_args()
+    seed_database(reset=args.reset)
+
+
 if __name__ == "__main__":
-    seed_database()
+    main()

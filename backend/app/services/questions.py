@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Question, QuestionType, User, UserQuestionAttempt
 from app.services.progress import (
+    reinforce_existing_review,
     schedule_review,
     score_text_against_concepts,
     update_concept_mastery,
@@ -20,20 +21,32 @@ def answer_question(db: Session, user: User, question_id: int, answer: Any) -> d
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
 
     evaluation = evaluate_question(question, answer)
+    review_scheduled = False
 
     for tag in question.concept_tags:
         update_concept_mastery(db, user, tag, evaluation["is_correct"])
-        schedule_review(
-            db,
-            user=user,
-            concept_tag=tag,
-            lesson=question.lesson,
-            question=question,
-            reason="Incorrect answer created a weak concept review."
-            if not evaluation["is_correct"]
-            else "Correct after review; schedule a later reinforcement.",
-            is_correct=evaluation["is_correct"],
-        )
+        if evaluation["is_correct"]:
+            review = reinforce_existing_review(
+                db,
+                user=user,
+                concept_tag=tag,
+                lesson=question.lesson,
+                question=question,
+                reason="Correct after review; schedule a later reinforcement.",
+            )
+        else:
+            review = schedule_review(
+                db,
+                user=user,
+                concept_tag=tag,
+                lesson=question.lesson,
+                question=question,
+                reason="Incorrect answer created a weak concept review.",
+                is_correct=False,
+            )
+        review_scheduled = review_scheduled or review is not None
+
+    evaluation["feedback"]["review_scheduled"] = review_scheduled
 
     progress = update_quick_check_progress(
         db, user=user, question=question, score=evaluation["score"], is_correct=evaluation["is_correct"]
@@ -145,7 +158,7 @@ def _build_result(
             "remedial_question": question.remedial_prompt
             or "Can you explain where this would appear in a real backend endpoint?",
             "explanation": explanation,
-            "review_scheduled": True,
+            "review_scheduled": False,
         }
     else:
         feedback = {
@@ -160,6 +173,6 @@ def _build_result(
             "remedial_question": question.remedial_prompt
             or "What would break if another function needed to reuse this result?",
             "explanation": question.explanation,
-            "review_scheduled": True,
+            "review_scheduled": False,
         }
     return {"is_correct": is_correct, "score": score, "feedback": feedback}

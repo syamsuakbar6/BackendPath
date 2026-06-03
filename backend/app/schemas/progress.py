@@ -80,6 +80,7 @@ class SearchResultItem(BaseModel):
 
 class SearchResponse(BaseModel):
     query: str
+    concept_tags: list[SearchResultItem]
     lessons: list[SearchResultItem]
     questions: list[SearchResultItem]
     debug_tasks: list[SearchResultItem]

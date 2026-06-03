@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24
     database_url: str = "sqlite:///./backend_mastery_dev.db"
+    auto_create_tables: bool = False
     backend_cors_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173"
     )

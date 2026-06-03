@@ -26,34 +26,76 @@ def search_learning(db: Session, query: str) -> dict:
         )
     )
 
-    tag_matches = db.scalars(
-        select(ConceptTag).where(
-            or_(ConceptTag.name.ilike(q), ConceptTag.slug.ilike(q), ConceptTag.description.ilike(q))
+    tag_matches = list(
+        db.scalars(
+            select(ConceptTag).where(
+                or_(
+                    ConceptTag.name.ilike(q),
+                    ConceptTag.slug.ilike(q),
+                    ConceptTag.description.ilike(q),
+                )
+            )
         )
-    ).all()
+    )
     for tag in tag_matches:
         for lesson in tag.lessons:
-            if lesson not in lessons:
-                lessons.append(lesson)
+            lessons = _append_unique(lessons, lesson)
 
-    questions = db.scalars(
-        select(Question)
-        .where(Question.prompt.ilike(q))
-        .options(selectinload(Question.lesson))
-        .limit(10)
-    ).all()
-    debug_tasks = db.scalars(
-        select(DebugTask)
-        .where(or_(DebugTask.title.ilike(q), DebugTask.prompt.ilike(q)))
-        .options(selectinload(DebugTask.lesson))
-        .limit(10)
-    ).all()
-    mini_tasks = db.scalars(
-        select(MiniTask)
-        .where(or_(MiniTask.title.ilike(q), MiniTask.prompt.ilike(q)))
-        .options(selectinload(MiniTask.lesson))
-        .limit(10)
-    ).all()
+    questions = list(
+        db.scalars(
+            select(Question)
+            .where(Question.prompt.ilike(q))
+            .options(selectinload(Question.lesson), selectinload(Question.concept_tags))
+            .limit(10)
+        )
+    )
+    debug_tasks = list(
+        db.scalars(
+            select(DebugTask)
+            .where(or_(DebugTask.title.ilike(q), DebugTask.prompt.ilike(q)))
+            .options(selectinload(DebugTask.lesson))
+            .limit(10)
+        )
+    )
+    mini_tasks = list(
+        db.scalars(
+            select(MiniTask)
+            .where(or_(MiniTask.title.ilike(q), MiniTask.prompt.ilike(q)))
+            .options(selectinload(MiniTask.lesson))
+            .limit(10)
+        )
+    )
+
+    for tag in tag_matches:
+        for question in tag.questions:
+            questions = _append_unique(questions, question)
+        debug_tasks.extend(
+            item
+            for item in db.scalars(
+                select(DebugTask)
+                .where(DebugTask.concept_tag_id == tag.id)
+                .options(selectinload(DebugTask.lesson))
+            )
+            if item.id not in {task.id for task in debug_tasks}
+        )
+        mini_tasks.extend(
+            item
+            for item in db.scalars(
+                select(MiniTask)
+                .where(MiniTask.concept_tag_id == tag.id)
+                .options(selectinload(MiniTask.lesson))
+            )
+            if item.id not in {task.id for task in mini_tasks}
+        )
+
+    for lesson in lessons:
+        for question in lesson.questions:
+            questions = _append_unique(questions, question)
+        for task in lesson.debug_tasks:
+            debug_tasks = _append_unique(debug_tasks, task)
+        for task in lesson.mini_tasks:
+            mini_tasks = _append_unique(mini_tasks, task)
+
     modules = db.scalars(
         select(Module)
         .where(or_(Module.title.ilike(q), Module.description.ilike(q)))
@@ -67,6 +109,16 @@ def search_learning(db: Session, query: str) -> dict:
 
     return {
         "query": query,
+        "concept_tags": [
+            {
+                "type": "concept_tag",
+                "id": tag.id,
+                "title": tag.name,
+                "description": tag.description,
+                "parent": None,
+            }
+            for tag in tag_matches[:10]
+        ],
         "lessons": [
             {
                 "type": "lesson",
@@ -133,6 +185,7 @@ def search_learning(db: Session, query: str) -> dict:
 def _empty(query: str) -> dict:
     return {
         "query": query,
+        "concept_tags": [],
         "lessons": [],
         "questions": [],
         "debug_tasks": [],
@@ -140,3 +193,9 @@ def _empty(query: str) -> dict:
         "modules": [],
         "tracks": [],
     }
+
+
+def _append_unique(items: list, item):
+    if item.id not in {existing.id for existing in items}:
+        items.append(item)
+    return items

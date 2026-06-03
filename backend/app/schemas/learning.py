@@ -115,6 +115,12 @@ class QuestionOptionPublicOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class QuestionOptionOut(QuestionOptionPublicOut):
+    question_id: int
+    is_correct: bool
+    explanation: str
+
+
 class QuestionOut(BaseModel):
     id: int
     lesson_id: int | None = None
@@ -259,6 +265,10 @@ class QuestionOptionCreate(BaseModel):
     text: str
     is_correct: bool = False
     explanation: str
+
+
+class QuestionOptionAdminCreate(QuestionOptionCreate):
+    question_id: int
 
 
 class QuestionCreate(BaseModel):

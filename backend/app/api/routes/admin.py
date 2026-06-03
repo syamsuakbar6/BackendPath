@@ -32,6 +32,9 @@ from app.schemas.learning import (
     ModuleCreate,
     ModuleOut,
     QuestionCreate,
+    QuestionOptionAdminCreate,
+    QuestionOptionCreate,
+    QuestionOptionOut,
     QuestionOut,
     TrackCreate,
     TrackOut,
@@ -416,6 +419,58 @@ def delete_question(
     _admin: User = Depends(require_admin),
 ) -> dict[str, str]:
     return _delete(db, _get_or_404(db, Question, item_id))
+
+
+@router.get("/question-options", response_model=list[QuestionOptionOut])
+def admin_question_options(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> list[QuestionOption]:
+    return list(db.scalars(select(QuestionOption).order_by(QuestionOption.id.asc())))
+
+
+@router.post(
+    "/question-options",
+    response_model=QuestionOptionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_question_option(
+    payload: QuestionOptionAdminCreate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> QuestionOption:
+    _get_or_404(db, Question, payload.question_id)
+    data = payload.model_dump()
+    question_id = data.pop("question_id")
+    return _create(db, QuestionOption(question_id=question_id, **data))
+
+
+@router.get("/question-options/{item_id}", response_model=QuestionOptionOut)
+def get_question_option_admin(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> QuestionOption:
+    return _get_or_404(db, QuestionOption, item_id)
+
+
+@router.patch("/question-options/{item_id}", response_model=QuestionOptionOut)
+def update_question_option(
+    item_id: int,
+    payload: dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> QuestionOption:
+    return _update(db, _get_or_404(db, QuestionOption, item_id), payload)
+
+
+@router.delete("/question-options/{item_id}")
+def delete_question_option(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict[str, str]:
+    return _delete(db, _get_or_404(db, QuestionOption, item_id))
 
 
 def _create(db: Session, item):

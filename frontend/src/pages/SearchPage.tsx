@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { SearchResponse, SearchResultItem } from "../types";
 
 const groups: Array<[keyof SearchResponse, string]> = [
+  ["concept_tags", "Concept tags"],
   ["lessons", "Lessons"],
   ["questions", "Questions"],
   ["debug_tasks", "Debug tasks"],

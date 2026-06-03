@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -213,16 +213,8 @@ def update_quick_check_progress(
     progress.quick_check_score = max(previous, score)
     if not is_correct:
         progress.review_required = True
-    elif progress.review_required and score >= 0.8:
-        active_due = db.scalar(
-            select(func.count(ReviewItem.id)).where(
-                ReviewItem.user_id == user.id,
-                ReviewItem.lesson_id == question.lesson_id,
-                ReviewItem.is_active.is_(True),
-            )
-        )
-        if not active_due:
-            progress.review_required = False
+    elif score >= 0.8:
+        progress.review_required = False
     recompute_progress(progress)
     return progress
 
@@ -271,6 +263,7 @@ def schedule_review(
     question: Question | None,
     reason: str,
     is_correct: bool,
+    create_if_missing: bool = True,
 ) -> ReviewItem | None:
     if not concept_tag and not lesson and not question:
         return None
@@ -286,6 +279,9 @@ def schedule_review(
     )
 
     now = utc_now()
+    if not review and not create_if_missing:
+        return None
+
     if not review:
         review = ReviewItem(
             user_id=user.id,
@@ -308,6 +304,26 @@ def schedule_review(
     else:
         review.due_for_review = now + timedelta(days=1)
     return review
+
+
+def reinforce_existing_review(
+    db: Session,
+    user: User,
+    concept_tag: ConceptTag | None,
+    lesson: Lesson | None,
+    question: Question | None,
+    reason: str,
+) -> ReviewItem | None:
+    return schedule_review(
+        db=db,
+        user=user,
+        concept_tag=concept_tag,
+        lesson=lesson,
+        question=question,
+        reason=reason,
+        is_correct=True,
+        create_if_missing=False,
+    )
 
 
 def due_review_items(db: Session, user: User) -> list[ReviewItem]:
