@@ -13,6 +13,7 @@ export type BlockType =
   | "warning"
   | "example_good"
   | "example_bad"
+  | "common_mistake"
   | "question"
   | "reflection"
   | "mini_task"
@@ -145,6 +146,7 @@ export interface QuestionOption {
 export interface Question {
   id: number;
   lesson_id?: number | null;
+  slug?: string | null;
   question_type: QuestionType;
   prompt: string;
   difficulty: string;
@@ -162,6 +164,7 @@ export interface Question {
 export interface MiniTask {
   id: number;
   lesson_id: number;
+  slug?: string | null;
   title: string;
   prompt: string;
   acceptance_criteria?: string[] | null;
@@ -172,6 +175,7 @@ export interface MiniTask {
 export interface DebugTask {
   id: number;
   lesson_id: number;
+  slug?: string | null;
   title: string;
   prompt: string;
   broken_code: string;

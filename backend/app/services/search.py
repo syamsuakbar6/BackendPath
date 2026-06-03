@@ -55,7 +55,7 @@ def search_learning(db: Session, query: str) -> dict:
     questions = list(
         db.scalars(
             select(Question)
-            .where(Question.prompt.ilike(q))
+            .where(or_(Question.prompt.ilike(q), Question.slug.ilike(q)))
             .where(Question.content_status == ContentStatus.published)
             .options(selectinload(Question.lesson), selectinload(Question.concept_tags))
             .limit(10)
@@ -69,7 +69,13 @@ def search_learning(db: Session, query: str) -> dict:
     debug_tasks = list(
         db.scalars(
             select(DebugTask)
-            .where(or_(DebugTask.title.ilike(q), DebugTask.prompt.ilike(q)))
+            .where(
+                or_(
+                    DebugTask.title.ilike(q),
+                    DebugTask.prompt.ilike(q),
+                    DebugTask.slug.ilike(q),
+                )
+            )
             .where(DebugTask.content_status == ContentStatus.published)
             .options(selectinload(DebugTask.lesson))
             .limit(10)
@@ -78,7 +84,13 @@ def search_learning(db: Session, query: str) -> dict:
     mini_tasks = list(
         db.scalars(
             select(MiniTask)
-            .where(or_(MiniTask.title.ilike(q), MiniTask.prompt.ilike(q)))
+            .where(
+                or_(
+                    MiniTask.title.ilike(q),
+                    MiniTask.prompt.ilike(q),
+                    MiniTask.slug.ilike(q),
+                )
+            )
             .where(MiniTask.content_status == ContentStatus.published)
             .options(selectinload(MiniTask.lesson))
             .limit(10)

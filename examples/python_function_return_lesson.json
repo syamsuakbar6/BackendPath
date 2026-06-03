@@ -53,7 +53,7 @@
       "sort_order": 5
     },
     {
-      "block_type": "warning",
+      "block_type": "common_mistake",
       "title": "Common beginner mistake",
       "body": "Seeing correct console output can feel like the function worked, but backend code usually needs a value that another function can inspect.",
       "sort_order": 6
@@ -74,12 +74,18 @@
       "block_type": "debug_task",
       "title": "Debug challenge",
       "body": "Find why the assertion fails and describe the fix.",
+      "block_metadata": {
+        "task_slug": "debug-hidden-none"
+      },
       "sort_order": 9
     },
     {
       "block_type": "mini_task",
       "title": "Mini task",
       "body": "Rewrite a function that prints a discount message so it returns the message instead.",
+      "block_metadata": {
+        "task_slug": "return-the-message"
+      },
       "sort_order": 10
     },
     {
@@ -99,6 +105,7 @@
   ],
   "questions": [
     {
+      "slug": "quick-check-return-vs-print",
       "question_type": "multiple_choice",
       "prompt": "Which design is easiest for an API route to test and reuse?",
       "difficulty": "foundation",
@@ -106,7 +113,6 @@
       "sample_ideal_answer": "Returning values keeps backend logic composable and testable.",
       "remedial_prompt": "What can a caller do with a returned value that it cannot do with printed output?",
       "sort_order": 1,
-      "content_status": "published",
       "concept_tag_slugs": ["return-values", "backend-logic"],
       "options": [
         {
@@ -130,6 +136,7 @@
       ]
     },
     {
+      "slug": "explain-return-vs-print",
       "question_type": "explain_back",
       "prompt": "Explain why return is usually better than print for backend logic.",
       "difficulty": "foundation",
@@ -143,24 +150,24 @@
       "misconception_notes": "Watch for answers that treat console output as proof that backend logic produced reusable data.",
       "remedial_prompt": "Where would a FastAPI route use a returned value?",
       "sort_order": 2,
-      "content_status": "published",
       "concept_tag_slugs": ["return-values", "backend-logic"]
     }
   ],
   "debug_tasks": [
     {
+      "slug": "debug-hidden-none",
       "title": "Debug the hidden None",
       "prompt": "Explain why the assertion fails, then describe the corrected function behavior.",
       "broken_code": "def calculate_total(price, tax):\n    print(price + tax)\n\ntotal = calculate_total(10, 2)\nassert total == 12",
       "hint": "Look at what calculate_total gives back to its caller.",
       "expected_fix_summary": "The function should return price + tax instead of only printing it.",
       "difficulty": "foundation",
-      "content_status": "published",
       "concept_tag_slug": "return-values"
     }
   ],
   "mini_tasks": [
     {
+      "slug": "return-the-message",
       "title": "Return the message",
       "prompt": "Write a small function that builds a discount message and returns it instead of printing it.",
       "acceptance_criteria": [
@@ -169,7 +176,6 @@
         "The code can be explained in one sentence."
       ],
       "difficulty": "foundation",
-      "content_status": "published",
       "concept_tag_slug": "backend-logic"
     }
   ]

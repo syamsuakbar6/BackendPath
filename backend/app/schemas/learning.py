@@ -131,6 +131,7 @@ class QuestionOptionOut(QuestionOptionPublicOut):
 class QuestionOut(BaseModel):
     id: int
     lesson_id: int | None = None
+    slug: str | None = None
     question_type: QuestionType
     prompt: str
     difficulty: str
@@ -150,6 +151,7 @@ class QuestionOut(BaseModel):
 class MiniTaskOut(BaseModel):
     id: int
     lesson_id: int
+    slug: str | None = None
     title: str
     prompt: str
     acceptance_criteria: list[str] | None = None
@@ -162,6 +164,7 @@ class MiniTaskOut(BaseModel):
 class DebugTaskOut(BaseModel):
     id: int
     lesson_id: int
+    slug: str | None = None
     title: str
     prompt: str
     broken_code: str
@@ -285,6 +288,7 @@ class QuestionOptionAdminCreate(QuestionOptionCreate):
 
 class QuestionCreate(BaseModel):
     lesson_id: int | None = None
+    slug: str | None = None
     question_type: QuestionType
     prompt: str
     difficulty: str = "foundation"
@@ -304,6 +308,7 @@ class QuestionCreate(BaseModel):
 class MiniTaskCreate(BaseModel):
     lesson_id: int
     concept_tag_id: int | None = None
+    slug: str | None = None
     title: str
     prompt: str
     acceptance_criteria: list[str] | None = None
@@ -314,6 +319,7 @@ class MiniTaskCreate(BaseModel):
 class DebugTaskCreate(BaseModel):
     lesson_id: int
     concept_tag_id: int | None = None
+    slug: str | None = None
     title: str
     prompt: str
     broken_code: str
@@ -339,6 +345,7 @@ class LessonImportBlock(BaseModel):
 
 
 class LessonImportQuestion(BaseModel):
+    slug: str | None = None
     question_type: QuestionType
     prompt: str
     difficulty: str = "foundation"
@@ -350,28 +357,30 @@ class LessonImportQuestion(BaseModel):
     misconception_notes: str | None = None
     remedial_prompt: str | None = None
     sort_order: int = 0
-    content_status: ContentStatus = ContentStatus.published
+    content_status: ContentStatus | None = None
     concept_tag_slugs: list[str] = Field(default_factory=list)
     options: list[QuestionOptionCreate] = Field(default_factory=list)
 
 
 class LessonImportDebugTask(BaseModel):
+    slug: str | None = None
     title: str
     prompt: str
     broken_code: str
     hint: str | None = None
     expected_fix_summary: str | None = None
     difficulty: str = "foundation"
-    content_status: ContentStatus = ContentStatus.published
+    content_status: ContentStatus | None = None
     concept_tag_slug: str | None = None
 
 
 class LessonImportMiniTask(BaseModel):
+    slug: str | None = None
     title: str
     prompt: str
     acceptance_criteria: list[str] | None = None
     difficulty: str = "foundation"
-    content_status: ContentStatus = ContentStatus.published
+    content_status: ContentStatus | None = None
     concept_tag_slug: str | None = None
 
 

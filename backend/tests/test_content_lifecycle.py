@@ -68,7 +68,7 @@ def _complete_import_payload(module_id: int, slug: str = "content-v1-complete") 
                 "sort_order": 5,
             },
             {
-                "block_type": "warning",
+                "block_type": "common_mistake",
                 "title": "Common beginner mistake",
                 "body": "Console output is not the same as caller-visible data.",
                 "sort_order": 6,
@@ -86,15 +86,30 @@ def _complete_import_payload(module_id: int, slug: str = "content-v1-complete") 
                 "sort_order": 8,
             },
             {
+                "block_type": "debug_task",
+                "title": "Debug challenge",
+                "body": "Explain why the caller receives None.",
+                "block_metadata": {"task_slug": "debug-hidden-none"},
+                "sort_order": 9,
+            },
+            {
+                "block_type": "mini_task",
+                "title": "Mini task",
+                "body": "Write a small function that returns a message.",
+                "block_metadata": {"task_slug": "return-message-mini-task"},
+                "sort_order": 10,
+            },
+            {
                 "block_type": "checklist",
                 "title": "End checkpoint",
                 "body": "Before moving on, check your understanding.",
                 "block_metadata": {"items": ["Concept stated", "Bad example explained"]},
-                "sort_order": 9,
+                "sort_order": 11,
             },
         ],
         "questions": [
             {
+                "slug": "quick-check-return-output",
                 "question_type": "multiple_choice",
                 "prompt": "Which output can an API route reuse?",
                 "difficulty": "foundation",
@@ -116,6 +131,7 @@ def _complete_import_payload(module_id: int, slug: str = "content-v1-complete") 
                 ],
             },
             {
+                "slug": "explain-back-return-output",
                 "question_type": "explain_back",
                 "prompt": "Explain why return is better for backend logic.",
                 "difficulty": "foundation",
@@ -132,6 +148,7 @@ def _complete_import_payload(module_id: int, slug: str = "content-v1-complete") 
         ],
         "debug_tasks": [
             {
+                "slug": "debug-hidden-none",
                 "title": "Debug hidden None",
                 "prompt": "Explain why total is None.",
                 "broken_code": "def total(a, b):\n    print(a + b)\n\nvalue = total(1, 2)",
@@ -143,6 +160,7 @@ def _complete_import_payload(module_id: int, slug: str = "content-v1-complete") 
         ],
         "mini_tasks": [
             {
+                "slug": "return-message-mini-task",
                 "title": "Return a message",
                 "prompt": "Write a function that returns a message.",
                 "acceptance_criteria": ["Returns a string", "Caller stores the string"],
@@ -253,3 +271,74 @@ def test_preview_endpoint_is_admin_only(client, learner_headers, admin_headers):
     admin_preview = client.get(f"/admin/lessons/{lesson['id']}/preview", headers=admin_headers)
     assert admin_preview.status_code == 200
     assert admin_preview.json()["content_status"] == "draft"
+
+
+def test_draft_lesson_child_questions_do_not_appear_to_learners_or_search(
+    client, learner_headers, admin_headers
+):
+    payload = _complete_import_payload(
+        _first_module_id(client, admin_headers),
+        slug="draft-child-question-hidden",
+    )
+    payload["questions"][0]["slug"] = "hidden-draft-child-sentinel"
+    payload["questions"][0]["prompt"] = "Hidden draft child sentinel question"
+
+    import_response = client.post(
+        "/admin/content/import/lesson",
+        headers=admin_headers,
+        json=payload,
+    )
+    assert import_response.status_code == 201
+    lesson = import_response.json()
+    assert lesson["questions"][0]["content_status"] == "draft"
+
+    learner_view = client.get(f"/lessons/{lesson['id']}", headers=learner_headers)
+    assert learner_view.status_code == 404
+
+    search = client.get("/search?q=hidden-draft-child-sentinel", headers=learner_headers)
+    assert search.status_code == 200
+    assert search.json()["questions"] == []
+
+
+def test_debug_task_block_can_reference_debug_task_slug(client, admin_headers):
+    lesson = _import_complete_lesson(client, admin_headers, slug="debug-block-reference")
+
+    debug_block = next(
+        block for block in lesson["blocks"] if block["block_type"] == "debug_task"
+    )
+    assert debug_block["block_metadata"]["task_slug"] == "debug-hidden-none"
+    assert lesson["debug_tasks"][0]["slug"] == "debug-hidden-none"
+
+
+def test_mini_task_block_can_reference_mini_task_slug(client, admin_headers):
+    lesson = _import_complete_lesson(client, admin_headers, slug="mini-block-reference")
+
+    mini_block = next(
+        block for block in lesson["blocks"] if block["block_type"] == "mini_task"
+    )
+    assert mini_block["block_metadata"]["task_slug"] == "return-message-mini-task"
+    assert lesson["mini_tasks"][0]["slug"] == "return-message-mini-task"
+
+
+def test_common_mistake_block_passes_publish_validation(client, admin_headers):
+    payload = _complete_import_payload(
+        _first_module_id(client, admin_headers),
+        slug="common-mistake-publishable",
+    )
+    payload["blocks"] = [
+        block for block in payload["blocks"] if block["block_type"] != "example_bad"
+    ]
+
+    import_response = client.post(
+        "/admin/content/import/lesson",
+        headers=admin_headers,
+        json=payload,
+    )
+    assert import_response.status_code == 201
+
+    publish = client.post(
+        f"/admin/lessons/{import_response.json()['id']}/publish",
+        headers=admin_headers,
+    )
+    assert publish.status_code == 200
+    assert publish.json()["content_status"] == "published"

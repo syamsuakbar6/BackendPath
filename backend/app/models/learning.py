@@ -209,6 +209,7 @@ class Question(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     lesson_id: Mapped[int | None] = mapped_column(ForeignKey("lessons.id"))
+    slug: Mapped[str | None] = mapped_column(String(255))
     question_type: Mapped[QuestionType] = mapped_column(
         SAEnum(QuestionType, values_callable=enum_values, native_enum=False), nullable=False
     )
@@ -263,6 +264,7 @@ class MiniTask(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id"), nullable=False)
     concept_tag_id: Mapped[int | None] = mapped_column(ForeignKey("concept_tags.id"))
+    slug: Mapped[str | None] = mapped_column(String(255))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     acceptance_criteria: Mapped[list[str] | None] = mapped_column(JSON)
@@ -283,6 +285,7 @@ class DebugTask(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id"), nullable=False)
     concept_tag_id: Mapped[int | None] = mapped_column(ForeignKey("concept_tags.id"))
+    slug: Mapped[str | None] = mapped_column(String(255))
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     broken_code: Mapped[str] = mapped_column(Text, nullable=False)

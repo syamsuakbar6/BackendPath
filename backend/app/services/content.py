@@ -70,6 +70,12 @@ def lesson_to_payload(lesson: Lesson, progress=None, learner_view: bool = False)
 def validate_import_payload(payload: LessonImportPayload) -> list[str]:
     errors: list[str] = []
     known_tag_slugs = {tag.slug for tag in payload.concept_tags}
+    question_slugs = [_clean_slug(question.slug) for question in payload.questions]
+    debug_task_slugs = [_clean_slug(task.slug) for task in payload.debug_tasks]
+    mini_task_slugs = [_clean_slug(task.slug) for task in payload.mini_tasks]
+    known_debug_task_slugs = {slug for slug in debug_task_slugs if slug}
+    known_mini_task_slugs = {slug for slug in mini_task_slugs if slug}
+
     if not payload.title.strip():
         errors.append("lesson.title is required.")
     if not payload.slug.strip():
@@ -82,6 +88,27 @@ def validate_import_payload(payload: LessonImportPayload) -> list[str]:
     for index, block in enumerate(payload.blocks):
         if not block.body.strip():
             errors.append(f"blocks[{index}].body is required.")
+        raw_task_slug = (block.block_metadata or {}).get("task_slug")
+        task_slug = _clean_slug(raw_task_slug) if isinstance(raw_task_slug, str) else None
+        if raw_task_slug is not None and not isinstance(raw_task_slug, str):
+            errors.append(f"blocks[{index}].block_metadata.task_slug must be a string.")
+        elif block.block_type == BlockType.debug_task and task_slug:
+            if task_slug not in known_debug_task_slugs:
+                errors.append(
+                    f"blocks[{index}] references unknown debug task slug '{task_slug}'."
+                )
+        elif block.block_type == BlockType.mini_task and task_slug:
+            if task_slug not in known_mini_task_slugs:
+                errors.append(
+                    f"blocks[{index}] references unknown mini task slug '{task_slug}'."
+                )
+
+    for slug in _duplicates([slug for slug in question_slugs if slug]):
+        errors.append(f"Duplicate question slug '{slug}'.")
+    for slug in _duplicates([slug for slug in debug_task_slugs if slug]):
+        errors.append(f"Duplicate debug task slug '{slug}'.")
+    for slug in _duplicates([slug for slug in mini_task_slugs if slug]):
+        errors.append(f"Duplicate mini task slug '{slug}'.")
 
     for index, question in enumerate(payload.questions):
         if not question.prompt.strip():
@@ -131,13 +158,22 @@ def validate_import_publishable(payload: LessonImportPayload) -> list[str]:
         errors.append("Missing core concept block.")
     if BlockType.example_good not in block_types:
         errors.append("Missing at least one good example block.")
-    if BlockType.example_bad not in block_types and not any("mistake" in title for title in block_titles):
+    has_mistake_block = BlockType.common_mistake in block_types or any(
+        "mistake" in title for title in block_titles
+    )
+    if BlockType.example_bad not in block_types and not has_mistake_block:
         errors.append("Missing at least one bad example or common mistake block.")
     if BlockType.checklist not in block_types:
         errors.append("Missing checklist block.")
-    if not any(question.question_type != QuestionType.explain_back for question in payload.questions):
+    active_questions = [
+        question
+        for question in payload.questions
+        if _effective_content_status(question.content_status, payload.content_status)
+        != ContentStatus.archived
+    ]
+    if not any(question.question_type != QuestionType.explain_back for question in active_questions):
         errors.append("Missing at least one quick check question.")
-    if not any(question.question_type == QuestionType.explain_back for question in payload.questions):
+    if not any(question.question_type == QuestionType.explain_back for question in active_questions):
         errors.append("Missing at least one explain-back question.")
     return errors
 
@@ -159,9 +195,10 @@ def validate_lesson_publishable(lesson: Lesson) -> list[str]:
         errors.append("Missing core concept block.")
     if BlockType.example_good not in blocks_by_type:
         errors.append("Missing at least one good example block.")
-    if BlockType.example_bad not in blocks_by_type and not any(
+    has_mistake_block = BlockType.common_mistake in blocks_by_type or any(
         "mistake" in title for title in block_titles
-    ):
+    )
+    if BlockType.example_bad not in blocks_by_type and not has_mistake_block:
         errors.append("Missing at least one bad example or common mistake block.")
     if BlockType.checklist not in blocks_by_type:
         errors.append("Missing checklist block.")
@@ -254,29 +291,35 @@ def import_lesson(db: Session, payload: LessonImportPayload) -> Lesson:
         for index, block in enumerate(payload.blocks)
     ]
     lesson.questions = [
-        _build_question(question, tags_by_slug)
+        _build_question(
+            question,
+            tags_by_slug,
+            _effective_content_status(question.content_status, payload.content_status),
+        )
         for question in payload.questions
     ]
     lesson.debug_tasks = [
         DebugTask(
+            slug=_clean_slug(task.slug),
             title=task.title,
             prompt=task.prompt,
             broken_code=task.broken_code,
             hint=task.hint,
             expected_fix_summary=task.expected_fix_summary,
             difficulty=task.difficulty,
-            content_status=task.content_status,
+            content_status=_effective_content_status(task.content_status, payload.content_status),
             concept_tag=tags_by_slug.get(task.concept_tag_slug or ""),
         )
         for task in payload.debug_tasks
     ]
     lesson.mini_tasks = [
         MiniTask(
+            slug=_clean_slug(task.slug),
             title=task.title,
             prompt=task.prompt,
             acceptance_criteria=task.acceptance_criteria,
             difficulty=task.difficulty,
-            content_status=task.content_status,
+            content_status=_effective_content_status(task.content_status, payload.content_status),
             concept_tag=tags_by_slug.get(task.concept_tag_slug or ""),
         )
         for task in payload.mini_tasks
@@ -318,6 +361,7 @@ def export_lesson(lesson: Lesson) -> dict:
         ],
         "questions": [
             {
+                "slug": question.slug,
                 "question_type": question.question_type.value,
                 "prompt": question.prompt,
                 "difficulty": question.difficulty,
@@ -345,6 +389,7 @@ def export_lesson(lesson: Lesson) -> dict:
         ],
         "debug_tasks": [
             {
+                "slug": task.slug,
                 "title": task.title,
                 "prompt": task.prompt,
                 "broken_code": task.broken_code,
@@ -358,6 +403,7 @@ def export_lesson(lesson: Lesson) -> dict:
         ],
         "mini_tasks": [
             {
+                "slug": task.slug,
                 "title": task.title,
                 "prompt": task.prompt,
                 "acceptance_criteria": task.acceptance_criteria,
@@ -386,8 +432,13 @@ def _get_or_create_tags(db: Session, payload: LessonImportPayload) -> dict[str, 
     return tags_by_slug
 
 
-def _build_question(question_payload, tags_by_slug: dict[str, ConceptTag]) -> Question:
+def _build_question(
+    question_payload,
+    tags_by_slug: dict[str, ConceptTag],
+    content_status: ContentStatus,
+) -> Question:
     question = Question(
+        slug=_clean_slug(question_payload.slug),
         question_type=question_payload.question_type,
         prompt=question_payload.prompt,
         difficulty=question_payload.difficulty,
@@ -399,7 +450,7 @@ def _build_question(question_payload, tags_by_slug: dict[str, ConceptTag]) -> Qu
         misconception_notes=question_payload.misconception_notes,
         remedial_prompt=question_payload.remedial_prompt,
         sort_order=question_payload.sort_order,
-        content_status=question_payload.content_status,
+        content_status=content_status,
         concept_tags=[
             tags_by_slug[slug]
             for slug in question_payload.concept_tag_slugs
@@ -416,3 +467,27 @@ def _build_question(question_payload, tags_by_slug: dict[str, ConceptTag]) -> Qu
         for option in question_payload.options
     ]
     return question
+
+
+def _effective_content_status(
+    child_status: ContentStatus | None,
+    lesson_status: ContentStatus,
+) -> ContentStatus:
+    return child_status or lesson_status
+
+
+def _clean_slug(value: str | None) -> str | None:
+    if value is None:
+        return None
+    cleaned = value.strip()
+    return cleaned or None
+
+
+def _duplicates(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for value in values:
+        if value in seen and value not in duplicates:
+            duplicates.append(value)
+        seen.add(value)
+    return duplicates

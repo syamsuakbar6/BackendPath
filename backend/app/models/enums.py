@@ -18,6 +18,7 @@ class BlockType(str, Enum):
     warning = "warning"
     example_good = "example_good"
     example_bad = "example_bad"
+    common_mistake = "common_mistake"
     question = "question"
     reflection = "reflection"
     mini_task = "mini_task"
