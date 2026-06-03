@@ -6,6 +6,7 @@ export type LessonStatus =
   | "completed"
   | "mastered";
 export type SkillStrength = "not_started" | "learning" | "weak" | "stable" | "strong";
+export type ContentStatus = "draft" | "published" | "archived";
 export type BlockType =
   | "text"
   | "code"
@@ -91,6 +92,7 @@ export interface LessonSummary {
   skill_strength: SkillStrength;
   mastery_score: number;
   locked: boolean;
+  content_status: ContentStatus;
 }
 
 export interface ModuleMap {
@@ -152,6 +154,7 @@ export interface Question {
   sample_ideal_answer?: string | null;
   misconception_notes?: string | null;
   remedial_prompt?: string | null;
+  content_status: ContentStatus;
   options: QuestionOption[];
   concept_tags: ConceptTag[];
 }
@@ -163,6 +166,7 @@ export interface MiniTask {
   prompt: string;
   acceptance_criteria?: string[] | null;
   difficulty: string;
+  content_status: ContentStatus;
 }
 
 export interface DebugTask {
@@ -174,6 +178,7 @@ export interface DebugTask {
   hint?: string | null;
   expected_fix_summary?: string | null;
   difficulty: string;
+  content_status: ContentStatus;
 }
 
 export interface LessonDetail {
@@ -185,6 +190,7 @@ export interface LessonDetail {
   why_it_matters: string;
   estimated_minutes: number;
   sort_order: number;
+  content_status: ContentStatus;
   concept_tags: ConceptTag[];
   blocks: LessonBlock[];
   questions: Question[];

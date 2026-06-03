@@ -3,7 +3,16 @@ from __future__ import annotations
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import ConceptTag, DebugTask, Lesson, MiniTask, Module, Question, Track
+from app.models import (
+    ConceptTag,
+    ContentStatus,
+    DebugTask,
+    Lesson,
+    MiniTask,
+    Module,
+    Question,
+    Track,
+)
 
 
 def search_learning(db: Session, query: str) -> dict:
@@ -15,6 +24,7 @@ def search_learning(db: Session, query: str) -> dict:
         db.scalars(
             select(Lesson)
             .where(
+                Lesson.content_status == ContentStatus.published,
                 or_(
                     Lesson.title.ilike(q),
                     Lesson.learning_goal.ilike(q),
@@ -39,20 +49,28 @@ def search_learning(db: Session, query: str) -> dict:
     )
     for tag in tag_matches:
         for lesson in tag.lessons:
-            lessons = _append_unique(lessons, lesson)
+            if lesson.content_status == ContentStatus.published:
+                lessons = _append_unique(lessons, lesson)
 
     questions = list(
         db.scalars(
             select(Question)
             .where(Question.prompt.ilike(q))
+            .where(Question.content_status == ContentStatus.published)
             .options(selectinload(Question.lesson), selectinload(Question.concept_tags))
             .limit(10)
         )
     )
+    questions = [
+        question
+        for question in questions
+        if question.lesson and question.lesson.content_status == ContentStatus.published
+    ]
     debug_tasks = list(
         db.scalars(
             select(DebugTask)
             .where(or_(DebugTask.title.ilike(q), DebugTask.prompt.ilike(q)))
+            .where(DebugTask.content_status == ContentStatus.published)
             .options(selectinload(DebugTask.lesson))
             .limit(10)
         )
@@ -61,6 +79,7 @@ def search_learning(db: Session, query: str) -> dict:
         db.scalars(
             select(MiniTask)
             .where(or_(MiniTask.title.ilike(q), MiniTask.prompt.ilike(q)))
+            .where(MiniTask.content_status == ContentStatus.published)
             .options(selectinload(MiniTask.lesson))
             .limit(10)
         )
@@ -68,33 +87,47 @@ def search_learning(db: Session, query: str) -> dict:
 
     for tag in tag_matches:
         for question in tag.questions:
-            questions = _append_unique(questions, question)
+            if (
+                question.content_status == ContentStatus.published
+                and question.lesson
+                and question.lesson.content_status == ContentStatus.published
+            ):
+                questions = _append_unique(questions, question)
         debug_tasks.extend(
             item
             for item in db.scalars(
                 select(DebugTask)
                 .where(DebugTask.concept_tag_id == tag.id)
+                .where(DebugTask.content_status == ContentStatus.published)
                 .options(selectinload(DebugTask.lesson))
             )
             if item.id not in {task.id for task in debug_tasks}
+            and item.lesson
+            and item.lesson.content_status == ContentStatus.published
         )
         mini_tasks.extend(
             item
             for item in db.scalars(
                 select(MiniTask)
                 .where(MiniTask.concept_tag_id == tag.id)
+                .where(MiniTask.content_status == ContentStatus.published)
                 .options(selectinload(MiniTask.lesson))
             )
             if item.id not in {task.id for task in mini_tasks}
+            and item.lesson
+            and item.lesson.content_status == ContentStatus.published
         )
 
     for lesson in lessons:
         for question in lesson.questions:
-            questions = _append_unique(questions, question)
+            if question.content_status == ContentStatus.published:
+                questions = _append_unique(questions, question)
         for task in lesson.debug_tasks:
-            debug_tasks = _append_unique(debug_tasks, task)
+            if task.content_status == ContentStatus.published:
+                debug_tasks = _append_unique(debug_tasks, task)
         for task in lesson.mini_tasks:
-            mini_tasks = _append_unique(mini_tasks, task)
+            if task.content_status == ContentStatus.published:
+                mini_tasks = _append_unique(mini_tasks, task)
 
     modules = db.scalars(
         select(Module)
@@ -103,6 +136,7 @@ def search_learning(db: Session, query: str) -> dict:
     ).all()
     tracks = db.scalars(
         select(Track)
+        .where(Track.is_published.is_(True))
         .where(or_(Track.title.ilike(q), Track.description.ilike(q), Track.target_audience.ilike(q)))
         .limit(10)
     ).all()

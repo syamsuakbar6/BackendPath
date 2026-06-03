@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
     ConceptTag,
+    ContentStatus,
     Lesson,
     LessonStatus,
     SkillStrength,
@@ -25,7 +26,11 @@ SESSION_MODES = {
 
 
 def get_dashboard(db: Session, user: User) -> dict:
-    track = db.scalar(select(Track).order_by(Track.sort_order.asc(), Track.id.asc()))
+    track = db.scalar(
+        select(Track)
+        .where(Track.is_published.is_(True))
+        .order_by(Track.sort_order.asc(), Track.id.asc())
+    )
     track_detail = load_track_detail(db, track.id) if track else None
     track_map = build_track_map(db, track_detail, user) if track_detail else None
 
@@ -43,6 +48,7 @@ def get_dashboard(db: Session, user: User) -> dict:
     continue_lesson = (
         lesson_summary(continue_record.lesson, continue_record)
         if continue_record and continue_record.lesson
+        and continue_record.lesson.content_status == ContentStatus.published
         else None
     )
 

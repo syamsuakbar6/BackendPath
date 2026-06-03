@@ -6,6 +6,12 @@ class UserRole(str, Enum):
     admin = "admin"
 
 
+class ContentStatus(str, Enum):
+    draft = "draft"
+    published = "published"
+    archived = "archived"
+
+
 class BlockType(str, Enum):
     text = "text"
     code = "code"

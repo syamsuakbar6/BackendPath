@@ -43,9 +43,33 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(error.detail ?? "Request failed");
+    throw new Error(formatError(error.detail ?? error));
   }
   return response.json() as Promise<T>;
+}
+
+function formatError(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) =>
+        typeof item === "object" && item !== null && "msg" in item
+          ? String(item.msg)
+          : JSON.stringify(item)
+      )
+      .join("; ");
+  }
+  if (typeof detail === "object" && detail !== null) {
+    const value = detail as { message?: unknown; errors?: unknown };
+    const message = typeof value.message === "string" ? value.message : "Request failed";
+    if (Array.isArray(value.errors)) {
+      return `${message} ${value.errors.join(" ")}`;
+    }
+    return message;
+  }
+  return "Request failed";
 }
 
 export const api = {
@@ -135,6 +159,30 @@ export const api = {
   },
   adminCreate(resource: string, payload: Record<string, unknown>) {
     return request<unknown>(`/admin/${resource}`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  adminPublishLesson(id: number) {
+    return request<unknown>(`/admin/lessons/${id}/publish`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+  },
+  adminArchiveLesson(id: number) {
+    return request<unknown>(`/admin/lessons/${id}/archive`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+  },
+  adminPreviewLesson(id: number) {
+    return request<LessonDetail>(`/admin/lessons/${id}/preview`);
+  },
+  adminExportLesson(id: number) {
+    return request<Record<string, unknown>>(`/admin/content/export/lesson/${id}`);
+  },
+  adminImportLesson(payload: Record<string, unknown>) {
+    return request<LessonDetail>("/admin/content/import/lesson", {
       method: "POST",
       body: JSON.stringify(payload)
     });

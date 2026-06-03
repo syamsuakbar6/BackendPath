@@ -5,11 +5,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_optional_user
 from app.db.session import get_db
 from app.models import (
+    ContentStatus,
     Language,
     Lesson,
-    LessonBlock,
     Level,
-    MiniTask,
     Module,
     Question,
     Track,
@@ -24,6 +23,7 @@ from app.schemas.learning import (
     TrackDetailOut,
     TrackOut,
 )
+from app.services.content import lesson_to_payload, load_lesson_with_content
 from app.services.learning import (
     build_track_map,
     load_track_detail,
@@ -45,7 +45,13 @@ def list_languages(db: Session = Depends(get_db)) -> list[Language]:
 
 @router.get("/tracks", response_model=list[TrackOut])
 def list_tracks(db: Session = Depends(get_db)) -> list[Track]:
-    return list(db.scalars(select(Track).order_by(Track.sort_order.asc(), Track.id.asc())))
+    return list(
+        db.scalars(
+            select(Track)
+            .where(Track.is_published.is_(True))
+            .order_by(Track.sort_order.asc(), Track.id.asc())
+        )
+    )
 
 
 @router.get("/tracks/{track_id}", response_model=TrackDetailOut)
@@ -86,6 +92,7 @@ def get_module(
     lessons = [
         lesson_summary(lesson, progress_map.get(lesson.id), locked=False)
         for lesson in module.lessons
+        if lesson.content_status == ContentStatus.published
     ]
     completed = sum(1 for item in lessons if item["status"].value in {"completed", "mastered"})
     progress = round(completed / len(lessons), 2) if lessons else 0.0
@@ -111,19 +118,8 @@ def get_lesson(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> dict:
-    lesson = db.scalar(
-        select(Lesson)
-        .where(Lesson.id == lesson_id)
-        .options(
-            selectinload(Lesson.blocks),
-            selectinload(Lesson.concept_tags),
-            selectinload(Lesson.questions).selectinload(Question.options),
-            selectinload(Lesson.questions).selectinload(Question.concept_tags),
-            selectinload(Lesson.mini_tasks),
-            selectinload(Lesson.debug_tasks),
-        )
-    )
-    if not lesson:
+    lesson = load_lesson_with_content(db, lesson_id)
+    if not lesson or lesson.content_status != ContentStatus.published:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
 
     progress = None
@@ -135,19 +131,4 @@ def get_lesson(
             )
         )
 
-    return {
-        "id": lesson.id,
-        "module_id": lesson.module_id,
-        "title": lesson.title,
-        "slug": lesson.slug,
-        "learning_goal": lesson.learning_goal,
-        "why_it_matters": lesson.why_it_matters,
-        "estimated_minutes": lesson.estimated_minutes,
-        "sort_order": lesson.sort_order,
-        "concept_tags": lesson.concept_tags,
-        "blocks": lesson.blocks,
-        "questions": lesson.questions,
-        "mini_tasks": lesson.mini_tasks,
-        "debug_tasks": lesson.debug_tasks,
-        "progress": progress,
-    }
+    return lesson_to_payload(lesson, progress=progress, learner_view=True)

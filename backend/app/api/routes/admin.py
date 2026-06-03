@@ -8,10 +8,13 @@ from app.api.deps import require_admin
 from app.db.session import get_db
 from app.models import (
     ConceptTag,
+    ContentStatus,
+    DebugTask,
     Language,
     Lesson,
     LessonBlock,
     Level,
+    MiniTask,
     Module,
     Question,
     QuestionOption,
@@ -27,8 +30,12 @@ from app.schemas.learning import (
     LessonBlockOut,
     LessonCreate,
     LessonDetailOut,
+    LessonImportPayload,
+    LessonValidationResponse,
     LevelCreate,
     LevelOut,
+    MiniTaskCreate,
+    MiniTaskOut,
     ModuleCreate,
     ModuleOut,
     QuestionCreate,
@@ -38,6 +45,17 @@ from app.schemas.learning import (
     QuestionOut,
     TrackCreate,
     TrackOut,
+    DebugTaskCreate,
+    DebugTaskOut,
+)
+from app.services.content import (
+    archive_lesson,
+    export_lesson,
+    import_lesson,
+    lesson_to_payload,
+    load_lesson_with_content,
+    publish_lesson,
+    validate_lesson_publishable,
 )
 
 
@@ -243,7 +261,7 @@ def admin_lessons(
             )
         )
     )
-    return [_lesson_payload(lesson) for lesson in lessons]
+    return [lesson_to_payload(lesson) for lesson in lessons]
 
 
 @router.post("/lessons", response_model=LessonDetailOut, status_code=status.HTTP_201_CREATED)
@@ -252,7 +270,17 @@ def create_lesson(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> dict:
-    return _lesson_payload(_create(db, Lesson(**payload.model_dump())))
+    data = payload.model_dump()
+    requested_status = data["content_status"]
+    if requested_status == ContentStatus.published:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Create lessons as draft, then publish after blocks and questions are valid."
+            },
+        )
+    data["is_published"] = requested_status == ContentStatus.published
+    return lesson_to_payload(_create(db, Lesson(**data)))
 
 
 @router.get("/lessons/{item_id}", response_model=LessonDetailOut)
@@ -261,7 +289,10 @@ def get_lesson_admin(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> dict:
-    return _lesson_payload(_get_or_404(db, Lesson, item_id))
+    lesson = load_lesson_with_content(db, item_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+    return lesson_to_payload(lesson)
 
 
 @router.patch("/lessons/{item_id}", response_model=LessonDetailOut)
@@ -271,7 +302,25 @@ def update_lesson(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> dict:
-    return _lesson_payload(_update(db, _get_or_404(db, Lesson, item_id), payload))
+    target_status = payload.pop("content_status", None)
+    lesson = _get_or_404(db, Lesson, item_id)
+    if payload:
+        lesson = _update(db, lesson, payload)
+    lesson = load_lesson_with_content(db, item_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+
+    if target_status == ContentStatus.published or target_status == ContentStatus.published.value:
+        return lesson_to_payload(publish_lesson(db, lesson))
+    if target_status == ContentStatus.archived or target_status == ContentStatus.archived.value:
+        return lesson_to_payload(archive_lesson(db, lesson))
+    if target_status == ContentStatus.draft or target_status == ContentStatus.draft.value:
+        lesson.content_status = ContentStatus.draft
+        lesson.is_published = False
+        db.commit()
+        db.refresh(lesson)
+
+    return lesson_to_payload(load_lesson_with_content(db, item_id) or lesson)
 
 
 @router.delete("/lessons/{item_id}")
@@ -281,6 +330,77 @@ def delete_lesson(
     _admin: User = Depends(require_admin),
 ) -> dict[str, str]:
     return _delete(db, _get_or_404(db, Lesson, item_id))
+
+
+@router.get("/lessons/{item_id}/preview", response_model=LessonDetailOut)
+def preview_lesson_admin(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    lesson = load_lesson_with_content(db, item_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+    return lesson_to_payload(lesson, progress=None, learner_view=False)
+
+
+@router.get("/lessons/{item_id}/validate", response_model=LessonValidationResponse)
+def validate_lesson_admin(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    lesson = load_lesson_with_content(db, item_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+    errors = validate_lesson_publishable(lesson)
+    return {"lesson_id": lesson.id, "valid": not errors, "errors": errors}
+
+
+@router.post("/lessons/{item_id}/publish", response_model=LessonDetailOut)
+def publish_lesson_admin(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    lesson = load_lesson_with_content(db, item_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+    return lesson_to_payload(publish_lesson(db, lesson))
+
+
+@router.post("/lessons/{item_id}/archive", response_model=LessonDetailOut)
+def archive_lesson_admin(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    lesson = load_lesson_with_content(db, item_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+    return lesson_to_payload(archive_lesson(db, lesson))
+
+
+@router.post("/content/import/lesson", response_model=LessonDetailOut, status_code=status.HTTP_201_CREATED)
+def import_lesson_admin(
+    payload: LessonImportPayload,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    lesson = import_lesson(db, payload)
+    return lesson_to_payload(lesson)
+
+
+@router.get("/content/export/lesson/{item_id}")
+def export_lesson_admin(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    lesson = load_lesson_with_content(db, item_id)
+    if not lesson:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found")
+    return export_lesson(lesson)
 
 
 @router.get("/lesson-blocks", response_model=list[LessonBlockOut])
@@ -317,6 +437,78 @@ def delete_lesson_block(
     _admin: User = Depends(require_admin),
 ) -> dict[str, str]:
     return _delete(db, _get_or_404(db, LessonBlock, item_id))
+
+
+@router.get("/debug-tasks", response_model=list[DebugTaskOut])
+def admin_debug_tasks(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> list[DebugTask]:
+    return list(db.scalars(select(DebugTask).order_by(DebugTask.id.asc())))
+
+
+@router.post("/debug-tasks", response_model=DebugTaskOut, status_code=status.HTTP_201_CREATED)
+def create_debug_task(
+    payload: DebugTaskCreate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> DebugTask:
+    return _create(db, DebugTask(**payload.model_dump()))
+
+
+@router.patch("/debug-tasks/{item_id}", response_model=DebugTaskOut)
+def update_debug_task(
+    item_id: int,
+    payload: dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> DebugTask:
+    return _update(db, _get_or_404(db, DebugTask, item_id), payload)
+
+
+@router.delete("/debug-tasks/{item_id}")
+def delete_debug_task(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict[str, str]:
+    return _delete(db, _get_or_404(db, DebugTask, item_id))
+
+
+@router.get("/mini-tasks", response_model=list[MiniTaskOut])
+def admin_mini_tasks(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> list[MiniTask]:
+    return list(db.scalars(select(MiniTask).order_by(MiniTask.id.asc())))
+
+
+@router.post("/mini-tasks", response_model=MiniTaskOut, status_code=status.HTTP_201_CREATED)
+def create_mini_task(
+    payload: MiniTaskCreate,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> MiniTask:
+    return _create(db, MiniTask(**payload.model_dump()))
+
+
+@router.patch("/mini-tasks/{item_id}", response_model=MiniTaskOut)
+def update_mini_task(
+    item_id: int,
+    payload: dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> MiniTask:
+    return _update(db, _get_or_404(db, MiniTask, item_id), payload)
+
+
+@router.delete("/mini-tasks/{item_id}")
+def delete_mini_task(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict[str, str]:
+    return _delete(db, _get_or_404(db, MiniTask, item_id))
 
 
 @router.get("/concept-tags", response_model=list[ConceptTagOut])
@@ -503,22 +695,3 @@ def _delete(db: Session, item) -> dict[str, str]:
     db.delete(item)
     db.commit()
     return {"status": "deleted"}
-
-
-def _lesson_payload(lesson: Lesson) -> dict:
-    return {
-        "id": lesson.id,
-        "module_id": lesson.module_id,
-        "title": lesson.title,
-        "slug": lesson.slug,
-        "learning_goal": lesson.learning_goal,
-        "why_it_matters": lesson.why_it_matters,
-        "estimated_minutes": lesson.estimated_minutes,
-        "sort_order": lesson.sort_order,
-        "concept_tags": lesson.concept_tags,
-        "blocks": lesson.blocks,
-        "questions": lesson.questions,
-        "mini_tasks": lesson.mini_tasks,
-        "debug_tasks": lesson.debug_tasks,
-        "progress": None,
-    }

@@ -2,7 +2,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import BlockType, LessonStatus, QuestionType, SkillStrength
+from app.models.enums import (
+    BlockType,
+    ContentStatus,
+    LessonStatus,
+    QuestionType,
+    SkillStrength,
+)
 
 
 class ConceptTagOut(BaseModel):
@@ -73,6 +79,7 @@ class LessonSummaryOut(BaseModel):
     skill_strength: SkillStrength = SkillStrength.not_started
     mastery_score: float = 0.0
     locked: bool = False
+    content_status: ContentStatus = ContentStatus.published
 
     model_config = {"from_attributes": True}
 
@@ -133,6 +140,7 @@ class QuestionOut(BaseModel):
     sample_ideal_answer: str | None = None
     misconception_notes: str | None = None
     remedial_prompt: str | None = None
+    content_status: ContentStatus = ContentStatus.published
     options: list[QuestionOptionPublicOut] = []
     concept_tags: list[ConceptTagOut] = []
 
@@ -146,6 +154,7 @@ class MiniTaskOut(BaseModel):
     prompt: str
     acceptance_criteria: list[str] | None = None
     difficulty: str
+    content_status: ContentStatus = ContentStatus.published
 
     model_config = {"from_attributes": True}
 
@@ -159,6 +168,7 @@ class DebugTaskOut(BaseModel):
     hint: str | None = None
     expected_fix_summary: str | None = None
     difficulty: str
+    content_status: ContentStatus = ContentStatus.published
 
     model_config = {"from_attributes": True}
 
@@ -188,6 +198,7 @@ class LessonDetailOut(BaseModel):
     why_it_matters: str
     estimated_minutes: int
     sort_order: int
+    content_status: ContentStatus = ContentStatus.published
     concept_tags: list[ConceptTagOut] = []
     blocks: list[LessonBlockOut] = []
     questions: list[QuestionOut] = []
@@ -241,7 +252,8 @@ class LessonCreate(BaseModel):
     why_it_matters: str
     estimated_minutes: int = 12
     sort_order: int = 0
-    is_published: bool = True
+    is_published: bool = False
+    content_status: ContentStatus = ContentStatus.draft
 
 
 class LessonBlockCreate(BaseModel):
@@ -284,5 +296,102 @@ class QuestionCreate(BaseModel):
     misconception_notes: str | None = None
     remedial_prompt: str | None = None
     sort_order: int = 0
+    content_status: ContentStatus = ContentStatus.draft
     concept_tag_ids: list[int] = Field(default_factory=list)
     options: list[QuestionOptionCreate] = Field(default_factory=list)
+
+
+class MiniTaskCreate(BaseModel):
+    lesson_id: int
+    concept_tag_id: int | None = None
+    title: str
+    prompt: str
+    acceptance_criteria: list[str] | None = None
+    difficulty: str = "foundation"
+    content_status: ContentStatus = ContentStatus.draft
+
+
+class DebugTaskCreate(BaseModel):
+    lesson_id: int
+    concept_tag_id: int | None = None
+    title: str
+    prompt: str
+    broken_code: str
+    hint: str | None = None
+    expected_fix_summary: str | None = None
+    difficulty: str = "foundation"
+    content_status: ContentStatus = ContentStatus.draft
+
+
+class LessonImportConceptTag(BaseModel):
+    name: str
+    slug: str
+    description: str | None = None
+
+
+class LessonImportBlock(BaseModel):
+    block_type: BlockType
+    title: str | None = None
+    body: str
+    code_language: str | None = None
+    block_metadata: dict[str, Any] | None = None
+    sort_order: int = 0
+
+
+class LessonImportQuestion(BaseModel):
+    question_type: QuestionType
+    prompt: str
+    difficulty: str = "foundation"
+    correct_answer: str | None = None
+    explanation: str | None = None
+    expected_concepts: list[str] | None = None
+    rubric: dict[str, Any] | None = None
+    sample_ideal_answer: str | None = None
+    misconception_notes: str | None = None
+    remedial_prompt: str | None = None
+    sort_order: int = 0
+    content_status: ContentStatus = ContentStatus.published
+    concept_tag_slugs: list[str] = Field(default_factory=list)
+    options: list[QuestionOptionCreate] = Field(default_factory=list)
+
+
+class LessonImportDebugTask(BaseModel):
+    title: str
+    prompt: str
+    broken_code: str
+    hint: str | None = None
+    expected_fix_summary: str | None = None
+    difficulty: str = "foundation"
+    content_status: ContentStatus = ContentStatus.published
+    concept_tag_slug: str | None = None
+
+
+class LessonImportMiniTask(BaseModel):
+    title: str
+    prompt: str
+    acceptance_criteria: list[str] | None = None
+    difficulty: str = "foundation"
+    content_status: ContentStatus = ContentStatus.published
+    concept_tag_slug: str | None = None
+
+
+class LessonImportPayload(BaseModel):
+    module_id: int
+    title: str
+    slug: str
+    learning_goal: str
+    why_it_matters: str
+    estimated_minutes: int = 12
+    sort_order: int = 0
+    content_status: ContentStatus = ContentStatus.draft
+    concept_tags: list[LessonImportConceptTag] = Field(default_factory=list)
+    blocks: list[LessonImportBlock] = Field(default_factory=list)
+    questions: list[LessonImportQuestion] = Field(default_factory=list)
+    debug_tasks: list[LessonImportDebugTask] = Field(default_factory=list)
+    mini_tasks: list[LessonImportMiniTask] = Field(default_factory=list)
+
+
+class LessonValidationResponse(BaseModel):
+    lesson_id: int
+    valid: bool
+    errors: list[str]

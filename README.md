@@ -90,6 +90,70 @@ cd backend
 python -m app.seed --reset
 ```
 
+## Content System V1
+
+Learning content now has a lifecycle:
+
+- `draft`: visible to admins only.
+- `published`: visible to learners and included in lesson/search/progress flows.
+- `archived`: retained for admins, hidden from learners.
+
+Lifecycle status is enforced for lessons, questions, debug tasks, and mini tasks. Reading a draft lesson by guessing its id should return `404` for learners.
+
+### Import Lesson JSON
+
+Use the admin API:
+
+```bash
+POST /admin/content/import/lesson
+```
+
+The import payload can include lesson metadata, blocks, questions, options, concept tags, debug task placeholders, and mini task placeholders.
+
+Schema documentation:
+
+```text
+docs/content_schema.md
+```
+
+Sample import file:
+
+```text
+examples/python_function_return_lesson.json
+```
+
+Recommended local workflow:
+
+1. Import as `draft`.
+2. Preview in the admin page.
+3. Publish after validation passes.
+
+### Export Lesson JSON
+
+Use:
+
+```bash
+GET /admin/content/export/lesson/{id}
+```
+
+This returns the lesson in the same structured JSON shape used for imports.
+
+### Publish and Archive
+
+Publish:
+
+```bash
+POST /admin/lessons/{id}/publish
+```
+
+Archive:
+
+```bash
+POST /admin/lessons/{id}/archive
+```
+
+A lesson cannot be published unless it has a learning goal block, why-it-matters block, core concept block, good example, bad example or common mistake, quick check question, explain-back question, and checklist block.
+
 ## Seed Accounts
 
 - Admin: `admin@example.com` / `admin123`

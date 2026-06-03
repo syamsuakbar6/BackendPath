@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models import Question, QuestionType, User, UserQuestionAttempt
+from app.models import ContentStatus, Question, QuestionType, User, UserQuestionAttempt
 from app.services.progress import (
     reinforce_existing_review,
     schedule_review,
@@ -18,6 +18,12 @@ from app.services.progress import (
 def answer_question(db: Session, user: User, question_id: int, answer: Any) -> dict[str, Any]:
     question = db.get(Question, question_id)
     if not question:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    if (
+        question.content_status != ContentStatus.published
+        or question.lesson is None
+        or question.lesson.content_status != ContentStatus.published
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
 
     evaluation = evaluate_question(question, answer)

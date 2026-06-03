@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import (
     Lesson,
     LessonStatus,
+    ContentStatus,
     Level,
     Module,
     SkillStrength,
@@ -52,14 +53,20 @@ def lesson_summary(lesson: Lesson, progress: UserLessonProgress | None, locked: 
         "skill_strength": skill_strength_from_progress(progress),
         "mastery_score": progress.mastery_score if progress else 0.0,
         "locked": locked,
+        "content_status": lesson.content_status,
     }
 
 
 def module_strength(module: Module, progress_map: dict[int, UserLessonProgress]) -> SkillStrength:
-    if not module.lessons:
+    lessons = [
+        lesson
+        for lesson in module.lessons
+        if lesson.content_status == ContentStatus.published
+    ]
+    if not lessons:
         return SkillStrength.not_started
     strengths = [
-        skill_strength_from_progress(progress_map.get(lesson.id)) for lesson in module.lessons
+        skill_strength_from_progress(progress_map.get(lesson.id)) for lesson in lessons
     ]
     if SkillStrength.weak in strengths:
         return SkillStrength.weak
@@ -83,7 +90,12 @@ def build_track_map(db: Session, track: Track, user: User | None) -> dict:
         for module in level.modules:
             lesson_items = []
             completed_count = 0
-            for lesson in module.lessons:
+            published_lessons = [
+                lesson
+                for lesson in module.lessons
+                if lesson.content_status == ContentStatus.published
+            ]
+            for lesson in published_lessons:
                 progress = progress_map.get(lesson.id)
                 locked = not previous_complete
                 if progress and progress.status in {LessonStatus.completed, LessonStatus.mastered}:
@@ -101,7 +113,7 @@ def build_track_map(db: Session, track: Track, user: User | None) -> dict:
                 )
 
             progress_percent = (
-                round(completed_count / len(module.lessons), 2) if module.lessons else 0.0
+                round(completed_count / len(published_lessons), 2) if published_lessons else 0.0
             )
             modules.append(
                 {

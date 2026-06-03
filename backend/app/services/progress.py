@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import (
     ConceptTag,
+    ContentStatus,
     Lesson,
     LessonStatus,
     Question,
@@ -105,7 +106,7 @@ def recompute_progress(progress: UserLessonProgress) -> UserLessonProgress:
 
 
 def start_lesson(db: Session, user: User, lesson_id: int) -> UserLessonProgress:
-    db.get(Lesson, lesson_id) or _raise_missing("Lesson")
+    _get_published_lesson_or_404(db, lesson_id)
     progress = get_or_create_progress(db, user.id, lesson_id)
     if progress.status == LessonStatus.not_started:
         progress.status = LessonStatus.in_progress
@@ -116,7 +117,7 @@ def start_lesson(db: Session, user: User, lesson_id: int) -> UserLessonProgress:
 
 
 def complete_reading(db: Session, user: User, lesson_id: int) -> UserLessonProgress:
-    db.get(Lesson, lesson_id) or _raise_missing("Lesson")
+    _get_published_lesson_or_404(db, lesson_id)
     progress = get_or_create_progress(db, user.id, lesson_id)
     progress.reading_completed = True
     recompute_progress(progress)
@@ -127,6 +128,7 @@ def complete_reading(db: Session, user: User, lesson_id: int) -> UserLessonProgr
 
 
 def mark_debug_task_completed(db: Session, user: User, lesson_id: int) -> UserLessonProgress:
+    _get_published_lesson_or_404(db, lesson_id)
     progress = get_or_create_progress(db, user.id, lesson_id)
     progress.debug_task_completed = True
     recompute_progress(progress)
@@ -136,6 +138,7 @@ def mark_debug_task_completed(db: Session, user: User, lesson_id: int) -> UserLe
 
 
 def mark_mini_task_completed(db: Session, user: User, lesson_id: int) -> UserLessonProgress:
+    _get_published_lesson_or_404(db, lesson_id)
     progress = get_or_create_progress(db, user.id, lesson_id)
     progress.mini_task_completed = True
     recompute_progress(progress)
@@ -145,6 +148,7 @@ def mark_mini_task_completed(db: Session, user: User, lesson_id: int) -> UserLes
 
 
 def submit_reflection(db: Session, user: User, lesson_id: int) -> UserLessonProgress:
+    _get_published_lesson_or_404(db, lesson_id)
     progress = get_or_create_progress(db, user.id, lesson_id)
     progress.reflection_submitted = True
     recompute_progress(progress)
@@ -171,9 +175,14 @@ def score_text_against_concepts(answer: str, expected_concepts: list[str] | None
 def submit_explain_back(
     db: Session, user: User, lesson_id: int, answer: str
 ) -> UserLessonProgress:
-    lesson = db.get(Lesson, lesson_id) or _raise_missing("Lesson")
+    lesson = _get_published_lesson_or_404(db, lesson_id)
     question = next(
-        (item for item in lesson.questions if item.question_type == QuestionType.explain_back),
+        (
+            item
+            for item in lesson.questions
+            if item.question_type == QuestionType.explain_back
+            and item.content_status == ContentStatus.published
+        ),
         None,
     )
     score, _matched = score_text_against_concepts(
@@ -350,6 +359,13 @@ def serialize_review_item(item: ReviewItem) -> dict[str, Any]:
         "due_for_review": item.due_for_review,
         "review_count": item.review_count,
     }
+
+
+def _get_published_lesson_or_404(db: Session, lesson_id: int) -> Lesson:
+    lesson = db.get(Lesson, lesson_id)
+    if not lesson or lesson.content_status != ContentStatus.published:
+        _raise_missing("Lesson")
+    return lesson
 
 
 def _raise_missing(name: str):

@@ -20,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.enums import BlockType, QuestionType
+from app.models.enums import BlockType, ContentStatus, QuestionType
 from app.models.user import enum_values
 
 
@@ -142,6 +142,11 @@ class Lesson(Base):
     estimated_minutes: Mapped[int] = mapped_column(Integer, default=12, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    content_status: Mapped[ContentStatus] = mapped_column(
+        SAEnum(ContentStatus, values_callable=enum_values, native_enum=False),
+        default=ContentStatus.published,
+        nullable=False,
+    )
 
     module = relationship("Module", back_populates="lessons")
     blocks = relationship(
@@ -217,6 +222,11 @@ class Question(Base):
     misconception_notes: Mapped[str | None] = mapped_column(Text)
     remedial_prompt: Mapped[str | None] = mapped_column(Text)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    content_status: Mapped[ContentStatus] = mapped_column(
+        SAEnum(ContentStatus, values_callable=enum_values, native_enum=False),
+        default=ContentStatus.published,
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -257,6 +267,11 @@ class MiniTask(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     acceptance_criteria: Mapped[list[str] | None] = mapped_column(JSON)
     difficulty: Mapped[str] = mapped_column(String(80), default="foundation", nullable=False)
+    content_status: Mapped[ContentStatus] = mapped_column(
+        SAEnum(ContentStatus, values_callable=enum_values, native_enum=False),
+        default=ContentStatus.published,
+        nullable=False,
+    )
 
     lesson = relationship("Lesson", back_populates="mini_tasks")
     concept_tag = relationship("ConceptTag")
@@ -274,6 +289,11 @@ class DebugTask(Base):
     hint: Mapped[str | None] = mapped_column(Text)
     expected_fix_summary: Mapped[str | None] = mapped_column(Text)
     difficulty: Mapped[str] = mapped_column(String(80), default="foundation", nullable=False)
+    content_status: Mapped[ContentStatus] = mapped_column(
+        SAEnum(ContentStatus, values_callable=enum_values, native_enum=False),
+        default=ContentStatus.published,
+        nullable=False,
+    )
 
     lesson = relationship("Lesson", back_populates="debug_tasks")
     concept_tag = relationship("ConceptTag")
