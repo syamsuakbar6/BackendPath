@@ -12,6 +12,28 @@ class ContentStatus(str, Enum):
     archived = "archived"
 
 
+class ProofType(str, Enum):
+    explain_back = "explain_back"
+    debug_task = "debug_task"
+    mini_task = "mini_task"
+    reflection = "reflection"
+    review = "review"
+
+
+class ProofStatus(str, Enum):
+    submitted = "submitted"
+    needs_revision = "needs_revision"
+    passed = "passed"
+    strong = "strong"
+
+
+class ScoreLabel(str, Enum):
+    incorrect = "incorrect"
+    weak = "weak"
+    stable = "stable"
+    strong = "strong"
+
+
 class BlockType(str, Enum):
     text = "text"
     code = "code"

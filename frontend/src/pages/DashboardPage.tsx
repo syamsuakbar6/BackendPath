@@ -83,6 +83,25 @@ export function DashboardPage() {
         </div>
       </section>
 
+      {recommended && dashboard.missing_proof_requirements.length ? (
+        <section className="panel mt-6 p-5">
+          <p className="text-sm font-medium text-teal">Why this lesson is not mastered yet</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {dashboard.missing_proof_requirements.map((item) => (
+              <div key={item.key} className="rounded-md border border-line bg-paper p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-medium text-ink">{item.label}</p>
+                  <span className="rounded-md border border-line bg-white px-2 py-1 text-xs text-ink/60">
+                    {item.status}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-ink/70">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="mt-6 grid gap-4 lg:grid-cols-3">
         <div className="panel p-5">
           <div className="flex items-center gap-2">

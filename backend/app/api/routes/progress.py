@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -8,6 +8,9 @@ from app.schemas.progress import (
     DashboardOut,
     ExplainBackRequest,
     LessonActionResponse,
+    ProofSubmissionOut,
+    ProofSubmissionRequest,
+    ProofSubmissionResponse,
     QuestionAnswerRequest,
     QuestionAnswerResponse,
     ReviewItemOut,
@@ -16,14 +19,12 @@ from app.services.dashboard import get_dashboard
 from app.services.progress import (
     complete_reading,
     due_review_items,
-    mark_debug_task_completed,
-    mark_mini_task_completed,
     serialize_review_item,
     start_lesson,
-    submit_explain_back,
-    submit_reflection,
 )
+from app.services.proofs import list_proof_submissions, submit_proof_submission
 from app.services.questions import answer_question
+from app.models import ProofType
 
 
 router = APIRouter(tags=["progress"])
@@ -59,8 +60,40 @@ def explain_back(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    progress = submit_explain_back(db, current_user, lesson_id, payload.answer)
+    _submission, progress = submit_proof_submission(
+        db,
+        current_user,
+        lesson_id,
+        ProofSubmissionRequest(
+            proof_type=ProofType.explain_back,
+            answer_text=payload.answer,
+        ),
+    )
     return {"progress": progress, "message": "Explain-back submitted for rubric matching."}
+
+
+@router.post("/lessons/{lesson_id}/proofs/submit", response_model=ProofSubmissionResponse)
+def submit_lesson_proof(
+    lesson_id: int,
+    payload: ProofSubmissionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    submission, progress = submit_proof_submission(db, current_user, lesson_id, payload)
+    return {
+        "submission": submission,
+        "progress": progress,
+        "message": "Proof submitted and evaluated.",
+    }
+
+
+@router.get("/lessons/{lesson_id}/proofs", response_model=list[ProofSubmissionOut])
+def list_lesson_proofs(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list:
+    return list_proof_submissions(db, current_user, lesson_id)
 
 
 @router.post("/lessons/{lesson_id}/complete-debug-task", response_model=LessonActionResponse)
@@ -69,8 +102,10 @@ def complete_debug_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    progress = mark_debug_task_completed(db, current_user, lesson_id)
-    return {"progress": progress, "message": "Debug proof point recorded."}
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Submit debug proof through /lessons/{lesson_id}/proofs/submit.",
+    )
 
 
 @router.post("/lessons/{lesson_id}/complete-mini-task", response_model=LessonActionResponse)
@@ -79,8 +114,10 @@ def complete_mini_task(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    progress = mark_mini_task_completed(db, current_user, lesson_id)
-    return {"progress": progress, "message": "Mini task proof point recorded."}
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Submit mini task proof through /lessons/{lesson_id}/proofs/submit.",
+    )
 
 
 @router.post("/lessons/{lesson_id}/submit-reflection", response_model=LessonActionResponse)
@@ -89,8 +126,10 @@ def reflection(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    progress = submit_reflection(db, current_user, lesson_id)
-    return {"progress": progress, "message": "Reflection checkpoint recorded."}
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Submit reflection proof through /lessons/{lesson_id}/proofs/submit.",
+    )
 
 
 @router.post("/questions/{question_id}/answer", response_model=QuestionAnswerResponse)

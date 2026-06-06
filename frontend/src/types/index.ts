@@ -7,6 +7,9 @@ export type LessonStatus =
   | "mastered";
 export type SkillStrength = "not_started" | "learning" | "weak" | "stable" | "strong";
 export type ContentStatus = "draft" | "published" | "archived";
+export type ProofType = "explain_back" | "debug_task" | "mini_task" | "reflection" | "review";
+export type ProofStatus = "submitted" | "needs_revision" | "passed" | "strong";
+export type ScoreLabel = "incorrect" | "weak" | "stable" | "strong";
 export type BlockType =
   | "text"
   | "code"
@@ -215,6 +218,47 @@ export interface Feedback {
   review_scheduled: boolean;
 }
 
+export interface ProofFeedback {
+  correct_points: string[];
+  missing_points: string[];
+  feedback: string;
+  remedial_question: string;
+}
+
+export interface ProofSubmission {
+  id: number;
+  user_id: number;
+  lesson_id: number;
+  proof_type: ProofType;
+  question_id?: number | null;
+  debug_task_id?: number | null;
+  mini_task_id?: number | null;
+  answer_text?: string | null;
+  code_text?: string | null;
+  status: ProofStatus;
+  score_label?: ScoreLabel | null;
+  score_numeric?: number | null;
+  feedback_json?: ProofFeedback | null;
+  attempt_number: number;
+  created_at: string;
+  evaluated_at?: string | null;
+}
+
+export interface ProofSubmissionRequest {
+  proof_type: ProofType;
+  question_id?: number | null;
+  debug_task_id?: number | null;
+  mini_task_id?: number | null;
+  answer_text?: string | null;
+  code_text?: string | null;
+}
+
+export interface ProofSubmissionResponse {
+  submission: ProofSubmission;
+  progress: LessonProgress;
+  message: string;
+}
+
 export interface QuestionAnswerResponse {
   attempt_id: number;
   feedback: Feedback;
@@ -226,9 +270,19 @@ export interface ReviewItem {
   concept?: string | null;
   lesson_title?: string | null;
   question_prompt?: string | null;
+  debug_task_title?: string | null;
+  mini_task_title?: string | null;
+  proof_type?: ProofType | null;
   reason: string;
   due_for_review: string;
   review_count: number;
+}
+
+export interface MissingProofRequirement {
+  key: string;
+  label: string;
+  status: string;
+  detail: string;
 }
 
 export interface Dashboard {
@@ -244,6 +298,7 @@ export interface Dashboard {
     correct_count: number;
   }>;
   due_reviews: ReviewItem[];
+  missing_proof_requirements: MissingProofRequirement[];
   consistency_label: string;
   mastery_labels: string[];
   session_modes: Record<string, number>;

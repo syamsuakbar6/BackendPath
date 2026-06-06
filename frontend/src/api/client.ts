@@ -5,6 +5,9 @@ import type {
   LessonDetail,
   LessonProgress,
   ModuleMap,
+  ProofSubmission,
+  ProofSubmissionRequest,
+  ProofSubmissionResponse,
   QuestionAnswerResponse,
   ReviewItem,
   SearchResponse,
@@ -126,6 +129,15 @@ export const api = {
       `/lessons/${id}/submit-explain-back`,
       { method: "POST", body: JSON.stringify({ answer }) }
     );
+  },
+  submitProof(id: number, payload: ProofSubmissionRequest) {
+    return request<ProofSubmissionResponse>(`/lessons/${id}/proofs/submit`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  lessonProofs(id: number) {
+    return request<ProofSubmission[]>(`/lessons/${id}/proofs`);
   },
   completeDebugTask(id: number) {
     return request<{ progress: LessonProgress; message: string }>(

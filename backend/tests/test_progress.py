@@ -100,10 +100,28 @@ def test_mastery_requires_multiple_proof_points(client, learner_headers):
     )
     assert explain.json()["progress"]["status"] == "completed"
 
-    debug = client.post(f"/lessons/{lesson_id}/complete-debug-task", headers=learner_headers)
+    lesson = client.get(f"/lessons/{lesson_id}", headers=learner_headers).json()
+    debug = client.post(
+        f"/lessons/{lesson_id}/proofs/submit",
+        headers=learner_headers,
+        json={
+            "proof_type": "debug_task",
+            "debug_task_id": lesson["debug_tasks"][0]["id"],
+            "answer_text": "Bug: the function prints instead of returning. Cause: the caller gets None. Fix: return the calculated value.",
+        },
+    )
     assert debug.json()["progress"]["status"] == "completed"
 
-    mini = client.post(f"/lessons/{lesson_id}/complete-mini-task", headers=learner_headers)
+    mini = client.post(
+        f"/lessons/{lesson_id}/proofs/submit",
+        headers=learner_headers,
+        json={
+            "proof_type": "mini_task",
+            "mini_task_id": lesson["mini_tasks"][0]["id"],
+            "code_text": "def build_message(name):\n    return f'Welcome, {name}'",
+            "answer_text": "This uses the concept intentionally and gives a backend route a returned string it can reuse.",
+        },
+    )
     assert mini.json()["progress"]["status"] == "mastered"
     assert mini.json()["progress"]["mastery_score"] >= 0.95
 

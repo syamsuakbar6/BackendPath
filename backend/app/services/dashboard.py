@@ -15,6 +15,7 @@ from app.models import (
     UserLessonProgress,
 )
 from app.services.learning import build_track_map, load_track_detail, lesson_summary
+from app.services.proofs import missing_proof_requirements
 from app.services.progress import due_review_items, serialize_review_item
 
 
@@ -54,6 +55,14 @@ def get_dashboard(db: Session, user: User) -> dict:
 
     recommended = track_map["recommended_lesson"] if track_map else None
     current_level = _find_current_level(track_map, recommended["id"] if recommended else None)
+    target_progress = continue_record if continue_record else None
+    if not target_progress and recommended:
+        target_progress = db.scalar(
+            select(UserLessonProgress).where(
+                UserLessonProgress.user_id == user.id,
+                UserLessonProgress.lesson_id == recommended["id"],
+            )
+        )
 
     weak_records = db.scalars(
         select(UserConceptMastery)
@@ -89,6 +98,7 @@ def get_dashboard(db: Session, user: User) -> dict:
             for record in weak_records
         ],
         "due_reviews": [serialize_review_item(item) for item in due_review_items(db, user)],
+        "missing_proof_requirements": missing_proof_requirements(db, user, target_progress),
         "consistency_label": _consistency_label(user.current_streak),
         "mastery_labels": [
             f"{record.concept_tag.name}: {record.strength.value}"

@@ -154,6 +154,54 @@ POST /admin/lessons/{id}/archive
 
 A lesson cannot be published unless it has a learning goal block, why-it-matters block, core concept block, good example, bad example or common mistake, quick check question, explain-back question, and checklist block.
 
+## Proof Submission Flow
+
+Proof-of-understanding now uses written submissions instead of checklist-only completion for explain-back, debug tasks, mini tasks, and reflections.
+
+Submit proof:
+
+```bash
+POST /lessons/{lesson_id}/proofs/submit
+```
+
+Payload shape:
+
+```json
+{
+  "proof_type": "debug_task",
+  "question_id": null,
+  "debug_task_id": 1,
+  "mini_task_id": null,
+  "answer_text": "Bug: ... Cause: ... Fix: ...",
+  "code_text": null
+}
+```
+
+Supported `proof_type` values:
+
+- `explain_back`
+- `debug_task`
+- `mini_task`
+- `reflection`
+- `review`
+
+List lesson proof submissions for the current learner:
+
+```bash
+GET /lessons/{lesson_id}/proofs
+```
+
+Evaluation is heuristic only for now. No AI grading is used. A proof only counts toward mastery when its status is `passed` or `strong`; weak proofs create review work and keep the lesson in review until repaired.
+
+Mastery requires:
+
+- reading completed
+- quick check passed
+- explain-back proof passed
+- debug proof passed
+- mini task proof passed
+- no active `review_required` flag
+
 ## Seed Accounts
 
 - Admin: `admin@example.com` / `admin123`

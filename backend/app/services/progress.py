@@ -19,6 +19,7 @@ from app.models import (
     User,
     UserConceptMastery,
     UserLessonProgress,
+    UserProofSubmission,
 )
 
 
@@ -323,9 +324,12 @@ def schedule_review(
     question: Question | None,
     reason: str,
     is_correct: bool,
+    debug_task=None,
+    mini_task=None,
+    proof_submission: UserProofSubmission | None = None,
     create_if_missing: bool = True,
 ) -> ReviewItem | None:
-    if not concept_tag and not lesson and not question:
+    if not concept_tag and not lesson and not question and not debug_task and not mini_task:
         return None
 
     review = db.scalar(
@@ -334,6 +338,8 @@ def schedule_review(
             ReviewItem.concept_tag_id == (concept_tag.id if concept_tag else None),
             ReviewItem.lesson_id == (lesson.id if lesson else None),
             ReviewItem.question_id == (question.id if question else None),
+            ReviewItem.debug_task_id == (debug_task.id if debug_task else None),
+            ReviewItem.mini_task_id == (mini_task.id if mini_task else None),
             ReviewItem.is_active.is_(True),
         )
     )
@@ -348,12 +354,15 @@ def schedule_review(
             concept_tag_id=concept_tag.id if concept_tag else None,
             lesson_id=lesson.id if lesson else None,
             question_id=question.id if question else None,
+            debug_task_id=debug_task.id if debug_task else None,
+            mini_task_id=mini_task.id if mini_task else None,
             reason=reason,
             due_for_review=now + timedelta(days=1),
         )
         db.add(review)
         db.flush()
 
+    review.proof_submission_id = proof_submission.id if proof_submission else review.proof_submission_id
     review.review_count += 1
     review.last_reviewed_at = now
     review.reason = reason
@@ -373,6 +382,9 @@ def reinforce_existing_review(
     lesson: Lesson | None,
     question: Question | None,
     reason: str,
+    debug_task=None,
+    mini_task=None,
+    proof_submission: UserProofSubmission | None = None,
 ) -> ReviewItem | None:
     return schedule_review(
         db=db,
@@ -382,6 +394,9 @@ def reinforce_existing_review(
         question=question,
         reason=reason,
         is_correct=True,
+        debug_task=debug_task,
+        mini_task=mini_task,
+        proof_submission=proof_submission,
         create_if_missing=False,
     )
 
@@ -406,6 +421,9 @@ def serialize_review_item(item: ReviewItem) -> dict[str, Any]:
         "concept": item.concept_tag.name if item.concept_tag else None,
         "lesson_title": item.lesson.title if item.lesson else None,
         "question_prompt": item.question.prompt if item.question else None,
+        "debug_task_title": item.debug_task.title if item.debug_task else None,
+        "mini_task_title": item.mini_task.title if item.mini_task else None,
+        "proof_type": item.proof_submission.proof_type if item.proof_submission else None,
         "reason": item.reason,
         "due_for_review": item.due_for_review,
         "review_count": item.review_count,

@@ -33,7 +33,11 @@ export function ReviewPage() {
                 <div className="flex items-center gap-2">
                   <RotateCcw size={18} className="text-berry" aria-hidden />
                   <h2 className="font-semibold text-ink">
-                    {review.concept ?? review.lesson_title ?? "Review item"}
+                    {review.concept ??
+                      review.debug_task_title ??
+                      review.mini_task_title ??
+                      review.lesson_title ??
+                      "Review item"}
                   </h2>
                 </div>
                 <span className="inline-flex items-center gap-2 rounded-md border border-line bg-paper px-2 py-1 text-xs text-ink/65">
@@ -42,8 +46,18 @@ export function ReviewPage() {
                 </span>
               </div>
               <p className="mt-3 text-sm leading-6 text-ink/70">{review.reason}</p>
+              {review.proof_type ? (
+                <p className="mt-3 rounded-md bg-paper p-3 text-sm text-ink/75">
+                  Proof type: {review.proof_type.replace("_", " ")}
+                </p>
+              ) : null}
               {review.question_prompt ? (
                 <p className="mt-3 rounded-md bg-paper p-3 text-sm text-ink/75">{review.question_prompt}</p>
+              ) : null}
+              {review.debug_task_title || review.mini_task_title ? (
+                <p className="mt-3 rounded-md bg-paper p-3 text-sm text-ink/75">
+                  Task: {review.debug_task_title ?? review.mini_task_title}
+                </p>
               ) : null}
             </article>
           ))

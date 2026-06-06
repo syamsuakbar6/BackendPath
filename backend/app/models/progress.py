@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.enums import LessonStatus, SkillStrength
+from app.models.enums import LessonStatus, ProofStatus, ProofType, ScoreLabel, SkillStrength
 from app.models.user import enum_values
 
 
@@ -74,6 +74,44 @@ class UserQuestionAttempt(Base):
     question = relationship("Question", back_populates="attempts")
 
 
+class UserProofSubmission(Base):
+    __tablename__ = "user_proof_submissions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    lesson_id: Mapped[int] = mapped_column(ForeignKey("lessons.id"), nullable=False)
+    proof_type: Mapped[ProofType] = mapped_column(
+        SAEnum(ProofType, values_callable=enum_values, native_enum=False),
+        nullable=False,
+    )
+    question_id: Mapped[int | None] = mapped_column(ForeignKey("questions.id"))
+    debug_task_id: Mapped[int | None] = mapped_column(ForeignKey("debug_tasks.id"))
+    mini_task_id: Mapped[int | None] = mapped_column(ForeignKey("mini_tasks.id"))
+    answer_text: Mapped[str | None] = mapped_column(Text)
+    code_text: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[ProofStatus] = mapped_column(
+        SAEnum(ProofStatus, values_callable=enum_values, native_enum=False),
+        default=ProofStatus.submitted,
+        nullable=False,
+    )
+    score_label: Mapped[ScoreLabel | None] = mapped_column(
+        SAEnum(ScoreLabel, values_callable=enum_values, native_enum=False),
+    )
+    score_numeric: Mapped[float | None] = mapped_column(Float)
+    feedback_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user = relationship("User", back_populates="proof_submissions")
+    lesson = relationship("Lesson")
+    question = relationship("Question")
+    debug_task = relationship("DebugTask")
+    mini_task = relationship("MiniTask")
+
+
 class UserConceptMastery(Base):
     __tablename__ = "user_concept_mastery"
 
@@ -107,6 +145,9 @@ class ReviewItem(Base):
     concept_tag_id: Mapped[int | None] = mapped_column(ForeignKey("concept_tags.id"))
     lesson_id: Mapped[int | None] = mapped_column(ForeignKey("lessons.id"))
     question_id: Mapped[int | None] = mapped_column(ForeignKey("questions.id"))
+    debug_task_id: Mapped[int | None] = mapped_column(ForeignKey("debug_tasks.id"))
+    mini_task_id: Mapped[int | None] = mapped_column(ForeignKey("mini_tasks.id"))
+    proof_submission_id: Mapped[int | None] = mapped_column(ForeignKey("user_proof_submissions.id"))
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     due_for_review: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     review_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -117,3 +158,6 @@ class ReviewItem(Base):
     concept_tag = relationship("ConceptTag", back_populates="review_items")
     lesson = relationship("Lesson")
     question = relationship("Question")
+    debug_task = relationship("DebugTask")
+    mini_task = relationship("MiniTask")
+    proof_submission = relationship("UserProofSubmission")
