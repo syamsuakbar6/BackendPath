@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import LessonStatus, ProofStatus, ProofType, ScoreLabel, SkillStrength
 from app.schemas.learning import LessonProgressOut, LessonSummaryOut
@@ -48,15 +48,28 @@ class ConceptStrengthOut(BaseModel):
 
 class ReviewItemOut(BaseModel):
     id: int
+    lesson_id: int | None = None
+    question_id: int | None = None
+    debug_task_id: int | None = None
+    mini_task_id: int | None = None
+    proof_submission_id: int | None = None
     concept: str | None = None
     lesson_title: str | None = None
     question_prompt: str | None = None
     debug_task_title: str | None = None
     mini_task_title: str | None = None
     proof_type: ProofType | None = None
+    original_answer_text: str | None = None
+    original_code_text: str | None = None
+    original_feedback: dict[str, Any] | None = None
+    missing_points: list[str] = Field(default_factory=list)
+    remedial_question: str | None = None
+    score_label: ScoreLabel | None = None
+    score_numeric: float | None = None
     reason: str
     due_for_review: datetime
     review_count: int
+    is_active: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -104,6 +117,23 @@ class ProofSubmissionResponse(BaseModel):
     message: str
 
 
+class ReviewSubmissionRequest(BaseModel):
+    answer_text: str
+    code_text: str | None = None
+
+
+class ReviewSubmissionResponse(BaseModel):
+    review: ReviewItemOut
+    passed: bool
+    status: ProofStatus
+    score_label: ScoreLabel
+    score_numeric: float
+    feedback_json: ProofFeedbackOut
+    progress: LessonProgressOut | None = None
+    next_due_for_review: datetime | None = None
+    message: str
+
+
 class MissingProofRequirementOut(BaseModel):
     key: str
     label: str
@@ -118,6 +148,9 @@ class DashboardOut(BaseModel):
     continue_lesson: LessonSummaryOut | None
     weak_concepts: list[ConceptStrengthOut]
     due_reviews: list[ReviewItemOut]
+    active_due_reviews_count: int
+    current_lesson_blocked_by_review: bool
+    next_recommended_review_action: str | None = None
     missing_proof_requirements: list[MissingProofRequirementOut]
     consistency_label: str
     mastery_labels: list[str]

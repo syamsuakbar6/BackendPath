@@ -415,18 +415,46 @@ def due_review_items(db: Session, user: User) -> list[ReviewItem]:
     )
 
 
+def lesson_has_due_review(db: Session, user: User, lesson_id: int) -> bool:
+    count = db.scalar(
+        select(func.count(ReviewItem.id)).where(
+            ReviewItem.user_id == user.id,
+            ReviewItem.lesson_id == lesson_id,
+            ReviewItem.is_active.is_(True),
+            ReviewItem.due_for_review <= utc_now(),
+        )
+    )
+    return bool(count)
+
+
 def serialize_review_item(item: ReviewItem) -> dict[str, Any]:
+    feedback = item.proof_submission.feedback_json if item.proof_submission else None
+    missing_points = feedback.get("missing_points", []) if feedback else []
+    remedial_question = feedback.get("remedial_question") if feedback else None
     return {
         "id": item.id,
+        "lesson_id": item.lesson_id,
+        "question_id": item.question_id,
+        "debug_task_id": item.debug_task_id,
+        "mini_task_id": item.mini_task_id,
+        "proof_submission_id": item.proof_submission_id,
         "concept": item.concept_tag.name if item.concept_tag else None,
         "lesson_title": item.lesson.title if item.lesson else None,
         "question_prompt": item.question.prompt if item.question else None,
         "debug_task_title": item.debug_task.title if item.debug_task else None,
         "mini_task_title": item.mini_task.title if item.mini_task else None,
         "proof_type": item.proof_submission.proof_type if item.proof_submission else None,
+        "original_answer_text": item.proof_submission.answer_text if item.proof_submission else None,
+        "original_code_text": item.proof_submission.code_text if item.proof_submission else None,
+        "original_feedback": feedback,
+        "missing_points": missing_points,
+        "remedial_question": remedial_question,
+        "score_label": item.proof_submission.score_label if item.proof_submission else None,
+        "score_numeric": item.proof_submission.score_numeric if item.proof_submission else None,
         "reason": item.reason,
         "due_for_review": item.due_for_review,
         "review_count": item.review_count,
+        "is_active": item.is_active,
     }
 
 

@@ -202,6 +202,39 @@ Mastery requires:
 - mini task proof passed
 - no active `review_required` flag
 
+## Review Remediation Flow
+
+Weak proof submissions and wrong quiz answers create review items. The review page now shows the lesson, concept, original weak proof when available, missing points, remedial question, due date, and review count.
+
+Due reviews:
+
+```bash
+GET /reviews/due
+```
+
+Submit a repair answer:
+
+```bash
+POST /reviews/{review_id}/submit
+```
+
+Payload:
+
+```json
+{
+  "answer_text": "A return value gives the caller a reusable result that can be tested.",
+  "code_text": null
+}
+```
+
+Review evaluation is heuristic only:
+
+- concept review: checks the missing concepts from the weak proof or related question
+- debug review: expects bug, cause, and fix
+- mini task review: expects a solution/code plus a short explanation
+
+If review passes, the weak proof can be repaired, concept mastery moves forward, `review_required` can clear, and lesson mastery is recomputed. If review fails, the item stays active, `review_count` increases, and the next due date is scheduled for tomorrow.
+
 ## Seed Accounts
 
 - Admin: `admin@example.com` / `admin123`

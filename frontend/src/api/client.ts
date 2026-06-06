@@ -10,6 +10,8 @@ import type {
   ProofSubmissionResponse,
   QuestionAnswerResponse,
   ReviewItem,
+  ReviewSubmissionRequest,
+  ReviewSubmissionResponse,
   SearchResponse,
   Track,
   TrackDetail,
@@ -162,6 +164,12 @@ export const api = {
   },
   reviewsDue() {
     return request<ReviewItem[]>("/reviews/due");
+  },
+  submitReview(id: number, payload: ReviewSubmissionRequest) {
+    return request<ReviewSubmissionResponse>(`/reviews/${id}/submit`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
   },
   search(q: string) {
     return request<SearchResponse>(`/search?q=${encodeURIComponent(q)}`);

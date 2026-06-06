@@ -483,6 +483,10 @@ def _has_latest_failed_proof(db: Session, user: User, lesson_id: int) -> bool:
     return any(row.status not in PASSING_STATUSES for row in latest.values())
 
 
+def has_latest_failed_proof(db: Session, user: User, lesson_id: int) -> bool:
+    return _has_latest_failed_proof(db, user, lesson_id)
+
+
 def _related_tags(
     lesson: Lesson,
     question: Question | None,

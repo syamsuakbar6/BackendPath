@@ -267,15 +267,45 @@ export interface QuestionAnswerResponse {
 
 export interface ReviewItem {
   id: number;
+  lesson_id?: number | null;
+  question_id?: number | null;
+  debug_task_id?: number | null;
+  mini_task_id?: number | null;
+  proof_submission_id?: number | null;
   concept?: string | null;
   lesson_title?: string | null;
   question_prompt?: string | null;
   debug_task_title?: string | null;
   mini_task_title?: string | null;
   proof_type?: ProofType | null;
+  original_answer_text?: string | null;
+  original_code_text?: string | null;
+  original_feedback?: ProofFeedback | null;
+  missing_points: string[];
+  remedial_question?: string | null;
+  score_label?: ScoreLabel | null;
+  score_numeric?: number | null;
   reason: string;
   due_for_review: string;
   review_count: number;
+  is_active: boolean;
+}
+
+export interface ReviewSubmissionRequest {
+  answer_text: string;
+  code_text?: string | null;
+}
+
+export interface ReviewSubmissionResponse {
+  review: ReviewItem;
+  passed: boolean;
+  status: ProofStatus;
+  score_label: ScoreLabel;
+  score_numeric: number;
+  feedback_json: ProofFeedback;
+  progress?: LessonProgress | null;
+  next_due_for_review?: string | null;
+  message: string;
 }
 
 export interface MissingProofRequirement {
@@ -298,6 +328,9 @@ export interface Dashboard {
     correct_count: number;
   }>;
   due_reviews: ReviewItem[];
+  active_due_reviews_count: number;
+  current_lesson_blocked_by_review: boolean;
+  next_recommended_review_action?: string | null;
   missing_proof_requirements: MissingProofRequirement[];
   consistency_label: string;
   mastery_labels: string[];

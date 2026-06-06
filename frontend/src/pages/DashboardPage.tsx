@@ -127,6 +127,15 @@ export function DashboardPage() {
             <CalendarCheck size={18} className="text-amber" aria-hidden />
             <h2 className="font-semibold text-ink">Due reviews</h2>
           </div>
+          <p className="mt-3 text-2xl font-semibold text-ink">{dashboard.active_due_reviews_count}</p>
+          {dashboard.current_lesson_blocked_by_review ? (
+            <p className="mt-2 text-sm leading-6 text-berry">
+              Current lesson is blocked by review.
+            </p>
+          ) : null}
+          {dashboard.next_recommended_review_action ? (
+            <p className="mt-2 text-sm leading-6 text-ink/65">{dashboard.next_recommended_review_action}</p>
+          ) : null}
           <div className="mt-4 grid gap-3">
             {dashboard.due_reviews.length ? (
               dashboard.due_reviews.slice(0, 4).map((review) => (

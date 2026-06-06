@@ -14,6 +14,8 @@ from app.schemas.progress import (
     QuestionAnswerRequest,
     QuestionAnswerResponse,
     ReviewItemOut,
+    ReviewSubmissionRequest,
+    ReviewSubmissionResponse,
 )
 from app.services.dashboard import get_dashboard
 from app.services.progress import (
@@ -24,6 +26,7 @@ from app.services.progress import (
 )
 from app.services.proofs import list_proof_submissions, submit_proof_submission
 from app.services.questions import answer_question
+from app.services.reviews import submit_review_answer
 from app.models import ProofType
 
 
@@ -161,3 +164,13 @@ def reviews_due(
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     return [serialize_review_item(item) for item in due_review_items(db, current_user)]
+
+
+@router.post("/reviews/{review_id}/submit", response_model=ReviewSubmissionResponse)
+def submit_review(
+    review_id: int,
+    payload: ReviewSubmissionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    return submit_review_answer(db, current_user, review_id, payload)

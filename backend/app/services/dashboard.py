@@ -82,6 +82,10 @@ def get_dashboard(db: Session, user: User) -> dict:
         .limit(8)
     ).all()
 
+    due_reviews = [serialize_review_item(item) for item in due_review_items(db, user)]
+    missing_requirements = missing_proof_requirements(db, user, target_progress)
+    blocked_by_review = any(item["key"] == "review_required" for item in missing_requirements)
+
     return {
         "active_track": track.title if track else None,
         "current_level": current_level,
@@ -97,8 +101,11 @@ def get_dashboard(db: Session, user: User) -> dict:
             }
             for record in weak_records
         ],
-        "due_reviews": [serialize_review_item(item) for item in due_review_items(db, user)],
-        "missing_proof_requirements": missing_proof_requirements(db, user, target_progress),
+        "due_reviews": due_reviews,
+        "active_due_reviews_count": len(due_reviews),
+        "current_lesson_blocked_by_review": blocked_by_review,
+        "next_recommended_review_action": _next_review_action(due_reviews),
+        "missing_proof_requirements": missing_requirements,
         "consistency_label": _consistency_label(user.current_streak),
         "mastery_labels": [
             f"{record.concept_tag.name}: {record.strength.value}"
@@ -129,3 +136,17 @@ def _consistency_label(streak: int) -> str:
     if streak >= 1:
         return "started recently"
     return "ready for a focused first session"
+
+
+def _next_review_action(due_reviews: list[dict]) -> str | None:
+    if not due_reviews:
+        return None
+    first = due_reviews[0]
+    target = (
+        first.get("concept")
+        or first.get("debug_task_title")
+        or first.get("mini_task_title")
+        or first.get("lesson_title")
+        or "this review item"
+    )
+    return f"Repair {target} before trying to master the current lesson."
