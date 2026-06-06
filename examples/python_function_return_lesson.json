@@ -1,182 +1,366 @@
 {
-  "module_id": 1,
-  "title": "Why return is better than print for backend logic",
-  "slug": "return-better-than-print-import-v1",
-  "learning_goal": "Explain why backend functions should return values callers can use.",
-  "why_it_matters": "API routes, service functions, tests, and background jobs need reusable values. Printing is visible to a person, but it does not give the caller data to work with.",
-  "estimated_minutes": 12,
-  "sort_order": 10,
-  "content_status": "draft",
-  "concept_tags": [
-    {
-      "name": "Return Values",
-      "slug": "return-values",
-      "description": "Returning data instead of only printing side effects."
-    },
-    {
-      "name": "Backend Logic",
-      "slug": "backend-logic",
-      "description": "Logic that can be tested and reused by API routes."
-    }
-  ],
-  "blocks": [
-    {
-      "block_type": "text",
-      "title": "Learning goal",
-      "body": "Explain why return gives backend code a reusable result while print only creates visible output.",
-      "sort_order": 1
-    },
-    {
-      "block_type": "text",
-      "title": "Why this matters in real backend work",
-      "body": "An API route needs a value it can put into a response, validate in a test, or pass to another service. Printed output disappears into logs or the console.",
-      "sort_order": 2
-    },
-    {
-      "block_type": "text",
-      "title": "Core concept",
-      "body": "Use return when the caller needs the result. Use print only when you intentionally want a side effect for a human or log stream.",
-      "sort_order": 3
-    },
-    {
-      "block_type": "example_good",
-      "title": "Good example",
-      "body": "def build_welcome_message(name: str) -> str:\n    return f\"Welcome, {name}\"\n\nmessage = build_welcome_message(\"Ayu\")",
-      "code_language": "python",
-      "sort_order": 4
-    },
-    {
-      "block_type": "example_bad",
-      "title": "Bad example",
-      "body": "def build_welcome_message(name: str) -> None:\n    print(f\"Welcome, {name}\")\n\nmessage = build_welcome_message(\"Ayu\")  # message is None",
-      "code_language": "python",
-      "sort_order": 5
-    },
-    {
-      "block_type": "common_mistake",
-      "title": "Common beginner mistake",
-      "body": "Seeing correct console output can feel like the function worked, but backend code usually needs a value that another function can inspect.",
-      "sort_order": 6
-    },
-    {
-      "block_type": "question",
-      "title": "Quick check",
-      "body": "Which function result can an API route reuse?",
-      "sort_order": 7
-    },
-    {
-      "block_type": "reflection",
-      "title": "Explain-back",
-      "body": "Explain the difference between return and print as if you were reviewing a junior developer's backend function.",
-      "sort_order": 8
-    },
-    {
-      "block_type": "debug_task",
-      "title": "Debug challenge",
-      "body": "Find why the assertion fails and describe the fix.",
-      "block_metadata": {
-        "task_slug": "debug-hidden-none"
-      },
-      "sort_order": 9
-    },
-    {
-      "block_type": "mini_task",
-      "title": "Mini task",
-      "body": "Rewrite a function that prints a discount message so it returns the message instead.",
-      "block_metadata": {
-        "task_slug": "return-the-message"
-      },
-      "sort_order": 10
-    },
-    {
-      "block_type": "checklist",
-      "title": "End checkpoint",
-      "body": "Use this checklist before publishing understanding.",
-      "block_metadata": {
-        "items": [
-          "I can state what return gives to the caller.",
-          "I can explain why print is a side effect.",
-          "I can fix a function that accidentally returns None.",
-          "I can connect this to API route behavior."
-        ]
-      },
-      "sort_order": 11
-    }
-  ],
-  "questions": [
-    {
-      "slug": "quick-check-return-vs-print",
-      "question_type": "multiple_choice",
-      "prompt": "Which design is easiest for an API route to test and reuse?",
-      "difficulty": "foundation",
-      "explanation": "Returned values can be inspected by callers, tests, and route handlers.",
-      "sample_ideal_answer": "Returning values keeps backend logic composable and testable.",
-      "remedial_prompt": "What can a caller do with a returned value that it cannot do with printed output?",
-      "sort_order": 1,
-      "concept_tag_slugs": ["return-values", "backend-logic"],
-      "options": [
-        {
-          "label": "A",
-          "text": "A function that prints the result immediately.",
-          "is_correct": false,
-          "explanation": "Printing creates output but does not give the caller a reusable value."
-        },
-        {
-          "label": "B",
-          "text": "A function that returns the result to the caller.",
-          "is_correct": true,
-          "explanation": "Returning keeps the value available to the caller."
-        },
-        {
-          "label": "C",
-          "text": "A function that always stores results in a global variable.",
-          "is_correct": false,
-          "explanation": "Global state is harder to test and reason about."
-        }
-      ]
-    },
-    {
-      "slug": "explain-return-vs-print",
-      "question_type": "explain_back",
-      "prompt": "Explain why return is usually better than print for backend logic.",
-      "difficulty": "foundation",
-      "expected_concepts": ["return", "caller", "test"],
-      "rubric": {
-        "strong": "Mentions returned data, caller reuse, and testability.",
-        "stable": "Explains return versus print with at least one backend consequence.",
-        "weak": "Only says return is better without explaining why."
-      },
-      "sample_ideal_answer": "Return gives the caller a value it can pass to an API response, check in a test, or reuse in another service. Print only writes visible output and usually returns None.",
-      "misconception_notes": "Watch for answers that treat console output as proof that backend logic produced reusable data.",
-      "remedial_prompt": "Where would a FastAPI route use a returned value?",
-      "sort_order": 2,
-      "concept_tag_slugs": ["return-values", "backend-logic"]
-    }
-  ],
-  "debug_tasks": [
-    {
-      "slug": "debug-hidden-none",
-      "title": "Debug the hidden None",
-      "prompt": "Explain why the assertion fails, then describe the corrected function behavior.",
-      "broken_code": "def calculate_total(price, tax):\n    print(price + tax)\n\ntotal = calculate_total(10, 2)\nassert total == 12",
-      "hint": "Look at what calculate_total gives back to its caller.",
-      "expected_fix_summary": "The function should return price + tax instead of only printing it.",
-      "difficulty": "foundation",
-      "concept_tag_slug": "return-values"
-    }
-  ],
-  "mini_tasks": [
-    {
-      "slug": "return-the-message",
-      "title": "Return the message",
-      "prompt": "Write a small function that builds a discount message and returns it instead of printing it.",
-      "acceptance_criteria": [
-        "The function returns a string.",
-        "A caller variable receives the string.",
-        "The code can be explained in one sentence."
-      ],
-      "difficulty": "foundation",
-      "concept_tag_slug": "backend-logic"
-    }
-  ]
+"module_id": 1,
+"title": "Why return is better than print for backend logic",
+"slug": "return-better-than-print-backend-logic-v1",
+"learning_goal": "Explain why backend functions should return reusable values instead of only printing visible output.",
+"why_it_matters": "Backend code is usually called by API routes, service functions, tests, background jobs, or other modules. These callers need actual values they can reuse. Printing only shows text to a console or log stream and usually gives the caller None.",
+"estimated_minutes": 18,
+"sort_order": 10,
+"content_status": "draft",
+"concept_tags": [
+{
+"name": "Return Values",
+"slug": "return-values",
+"description": "Using return to send data back to the caller."
+},
+{
+"name": "Print Side Effects",
+"slug": "print-side-effects",
+"description": "Understanding print as visible output, not reusable program data."
+},
+{
+"name": "Backend Logic",
+"slug": "backend-logic",
+"description": "Code that can be reused, tested, and connected to API routes or services."
+},
+{
+"name": "Function Caller",
+"slug": "function-caller",
+"description": "The code that calls a function and receives its result."
+},
+{
+"name": "Testable Code",
+"slug": "testable-code",
+"description": "Code that can be checked reliably with automated tests."
+}
+],
+"blocks": [
+{
+"block_type": "text",
+"title": "Learning goal",
+"body": "By the end of this lesson, you should be able to explain why backend functions usually need to return values, not only print output.",
+"sort_order": 1
+},
+{
+"block_type": "text",
+"title": "Why this matters in real backend work",
+"body": "In backend development, functions are rarely written only to show something on the screen. A FastAPI route may need a value to send as a JSON response. A service function may need a value to pass to another function. A test may need a value to assert. If your function only prints, the caller usually gets None.",
+"sort_order": 2
+},
+{
+"block_type": "text",
+"title": "Core concept",
+"body": "return sends a value back to the caller. print sends text to the console. The console output may look correct, but it does not mean the caller received usable data.",
+"sort_order": 3
+},
+{
+"block_type": "code",
+"title": "The trap: visible output is not the same as returned data",
+"body": "def calculate_total(price: int, quantity: int) -> None:\n    print(price * quantity)\n\ntotal = calculate_total(10000, 2)\nprint(total)",
+"code_language": "python",
+"block_metadata": {
+"notes": "This prints 20000 inside the function, then prints None because calculate_total does not return the value."
+},
+"sort_order": 4
+},
+{
+"block_type": "example_bad",
+"title": "Bad example: function looks correct but returns None",
+"body": "def build_response_message(username: str) -> None:\n    print(f'Welcome, {username}')\n\nmessage = build_response_message('Ayu')\n\n# The console shows: Welcome, Ayu\n# But message is actually None.",
+"code_language": "python",
+"sort_order": 5
+},
+{
+"block_type": "common_mistake",
+"title": "Common beginner mistake",
+"body": "Beginners often think a function is correct because something appears in the terminal. In backend work, that is not enough. The important question is: can another part of the program use the result?",
+"sort_order": 6
+},
+{
+"block_type": "example_good",
+"title": "Good example: return gives the caller reusable data",
+"body": "def build_response_message(username: str) -> str:\n    return f'Welcome, {username}'\n\nmessage = build_response_message('Ayu')\n\n# Now message contains: 'Welcome, Ayu'\n# Another function, route, or test can reuse it.",
+"code_language": "python",
+"sort_order": 7
+},
+{
+"block_type": "code",
+"title": "Backend example: service function used by an API route",
+"body": "def build_user_payload(username: str) -> dict:\n    return {\n        'message': f'Welcome, {username}',\n        'username': username\n    }\n\n# Example route logic\npayload = build_user_payload('Ayu')\n# The API route can now return payload as JSON.",
+"code_language": "python",
+"sort_order": 8
+},
+{
+"block_type": "text",
+"title": "When is print still useful?",
+"body": "print is not evil. It can be useful for temporary debugging, quick experiments, or simple CLI programs. But in backend logic, print should not be the main way your function produces results. For production logs, backend projects usually use logging instead of random print calls.",
+"sort_order": 9
+},
+{
+"block_type": "code",
+"title": "Testing angle: returned values are easier to test",
+"body": "def calculate_total(price: int, quantity: int) -> int:\n    return price * quantity\n\n\ndef test_calculate_total():\n    assert calculate_total(10000, 2) == 20000",
+"code_language": "python",
+"sort_order": 10
+},
+{
+"block_type": "question",
+"title": "Quick check",
+"body": "If a function prints the correct answer but returns None, can an API route directly reuse the printed value as a JSON response?",
+"block_metadata": {
+"question_slug": "quick-check-printed-output-vs-returned-value"
+},
+"sort_order": 11
+},
+{
+"block_type": "reflection",
+"title": "Explain-back",
+"body": "Explain why return is usually better than print for backend logic. Use the words caller, value, and test in your explanation.",
+"block_metadata": {
+"question_slug": "explain-return-vs-print-backend"
+},
+"sort_order": 12
+},
+{
+"block_type": "debug_task",
+"title": "Debug challenge",
+"body": "A function prints the correct total, but the assertion fails. Find the bug and explain the fix.",
+"block_metadata": {
+"task_slug": "debug-printed-total-returns-none"
+},
+"sort_order": 13
+},
+{
+"block_type": "mini_task",
+"title": "Mini task",
+"body": "Rewrite a function so it returns a user summary dictionary instead of printing it.",
+"block_metadata": {
+"task_slug": "return-user-summary-dict"
+},
+"sort_order": 14
+},
+{
+"block_type": "checklist",
+"title": "End checkpoint",
+"body": "Use this checklist before you mark this lesson as understood.",
+"block_metadata": {
+"items": [
+"I can explain that return sends a value back to the caller.",
+"I can explain that print only creates visible output as a side effect.",
+"I can identify when a function accidentally returns None.",
+"I can explain why returned values are easier to test.",
+"I can connect return values to API responses and service functions.",
+"I know that print can be useful for debugging, but should not be the main output of backend logic."
+]
+},
+"sort_order": 15
+}
+],
+"questions": [
+{
+"slug": "quick-check-printed-output-vs-returned-value",
+"question_type": "multiple_choice",
+"prompt": "A function prints the correct result, but does not use return. What does the caller usually receive?",
+"difficulty": "foundation",
+"explanation": "If a Python function has no return statement, it returns None by default. Printed output appears in the console, but the caller does not receive that text as a reusable value.",
+"sample_ideal_answer": "The caller receives None because printing is not the same as returning a value.",
+"remedial_prompt": "If you assign result = my_function(), where does the value of result come from: print or return?",
+"sort_order": 1,
+"concept_tag_slugs": [
+"return-values",
+"print-side-effects",
+"function-caller"
+],
+"options": [
+{
+"label": "A",
+"text": "The caller receives the text printed in the terminal.",
+"is_correct": false,
+"explanation": "Printed text goes to the console. It is not automatically passed back to the caller."
+},
+{
+"label": "B",
+"text": "The caller receives None unless the function returns something.",
+"is_correct": true,
+"explanation": "Correct. In Python, a function without return gives None back to the caller."
+},
+{
+"label": "C",
+"text": "The caller receives the last printed number.",
+"is_correct": false,
+"explanation": "Python does not treat printed output as a returned value."
+},
+{
+"label": "D",
+"text": "The caller receives True because the function ran successfully.",
+"is_correct": false,
+"explanation": "Running successfully does not mean the function returns True. It returns whatever the return statement gives, or None by default."
+}
+]
+},
+{
+"slug": "quick-check-best-backend-function-design",
+"question_type": "multiple_choice",
+"prompt": "Which function design is usually better for backend service logic?",
+"difficulty": "foundation",
+"explanation": "Backend service logic should usually return values so API routes, tests, and other services can reuse the result.",
+"sample_ideal_answer": "A backend service function should usually return the result instead of only printing it.",
+"remedial_prompt": "What does an API route need in order to send a JSON response?",
+"sort_order": 2,
+"concept_tag_slugs": [
+"backend-logic",
+"return-values",
+"testable-code"
+],
+"options": [
+{
+"label": "A",
+"text": "A function that calculates data and returns it.",
+"is_correct": true,
+"explanation": "Correct. Returned data can be reused by routes, tests, or other functions."
+},
+{
+"label": "B",
+"text": "A function that calculates data and only prints it.",
+"is_correct": false,
+"explanation": "Printing may show the data, but it does not give the caller reusable data."
+},
+{
+"label": "C",
+"text": "A function that stores every result in a global variable.",
+"is_correct": false,
+"explanation": "Global state makes backend code harder to test and reason about."
+},
+{
+"label": "D",
+"text": "A function that mixes calculation, printing, database access, and response formatting in one place.",
+"is_correct": false,
+"explanation": "Mixing too many responsibilities makes code harder to test, debug, and maintain."
+}
+]
+},
+{
+"slug": "scenario-return-vs-print-api-route",
+"question_type": "scenario_question",
+"prompt": "A FastAPI route calls build_user_payload('Ayu'). The function prints {'username': 'Ayu'} but does not return it. The route then tries to return the variable payload. What will likely happen?",
+"difficulty": "foundation",
+"explanation": "The route variable will likely contain None because the function printed the payload but did not return it.",
+"sample_ideal_answer": "The route will not receive the dictionary. It will receive None, because print only outputs to the console and return is needed to pass the dictionary back to the caller.",
+"remedial_prompt": "What must build_user_payload do if the route needs the dictionary?",
+"sort_order": 3,
+"concept_tag_slugs": [
+"backend-logic",
+"function-caller",
+"return-values"
+],
+"options": [
+{
+"label": "A",
+"text": "The route receives the printed dictionary automatically.",
+"is_correct": false,
+"explanation": "Console output is not automatically assigned to the caller's variable."
+},
+{
+"label": "B",
+"text": "The route likely receives None.",
+"is_correct": true,
+"explanation": "Correct. Without return, Python functions return None."
+},
+{
+"label": "C",
+"text": "The route receives a string version of the dictionary.",
+"is_correct": false,
+"explanation": "Printing may display a string-like representation, but it does not return that string."
+},
+{
+"label": "D",
+"text": "The route crashes before the function runs.",
+"is_correct": false,
+"explanation": "The function can run and print output, but still return None."
+}
+]
+},
+{
+"slug": "explain-return-vs-print-backend",
+"question_type": "explain_back",
+"prompt": "Explain why return is usually better than print for backend logic. Use the ideas of caller, reusable value, and testing.",
+"difficulty": "foundation",
+"expected_concepts": [
+"return sends data back to the caller",
+"print only creates visible output or side effect",
+"backend routes and services need reusable values",
+"returned values are easier to test",
+"functions without return usually return None"
+],
+"rubric": {
+"strong": "Clearly explains that return gives reusable data to the caller, print only shows output, and backend code/tests need returned values.",
+"stable": "Correctly explains return versus print and gives at least one backend-related consequence.",
+"weak": "Says return is better but does not explain caller reuse, None, or testability.",
+"incorrect": "Claims printed output is the same as returned data or says return is only for displaying output."
+},
+"sample_ideal_answer": "return is better for backend logic because it gives a value back to the caller. An API route, service, or test can reuse that returned value. print only displays output in the console and usually leaves the caller with None. That makes the function harder to connect to other backend code and harder to test.",
+"misconception_notes": "Watch for answers that treat terminal output as proof that a function produced reusable program data. Also watch for answers that say print and return are interchangeable.",
+"remedial_prompt": "If result = calculate_total(10, 2), what decides the value stored in result?",
+"sort_order": 4,
+"concept_tag_slugs": [
+"return-values",
+"print-side-effects",
+"backend-logic",
+"function-caller",
+"testable-code"
+]
+}
+],
+"debug_tasks": [
+{
+"slug": "debug-printed-total-returns-none",
+"title": "Debug the printed total that returns None",
+"prompt": "The function prints 12, but the assertion fails. Explain why it fails and how to fix it.",
+"broken_code": "def calculate_total(price: int, tax: int) -> None:\n    print(price + tax)\n\ntotal = calculate_total(10, 2)\nassert total == 12",
+"hint": "The printed number is visible in the console. But what value is stored inside total?",
+"expected_fix_summary": "The function should return price + tax instead of only printing it. Then total will receive 12.",
+"difficulty": "foundation",
+"concept_tag_slug": "return-values"
+},
+{
+"slug": "debug-api-payload-none",
+"title": "Debug the API payload that becomes None",
+"prompt": "A route wants to return a user payload, but the payload variable becomes None. Explain the bug and the correct fix.",
+"broken_code": "def build_user_payload(username: str) -> None:\n    print({'username': username, 'active': True})\n\npayload = build_user_payload('Ayu')\n# API route tries to return payload\nassert payload == {'username': 'Ayu', 'active': True}",
+"hint": "The function displays the dictionary, but does it give the dictionary back to the caller?",
+"expected_fix_summary": "The function should return the dictionary: return {'username': username, 'active': True}.",
+"difficulty": "foundation",
+"concept_tag_slug": "backend-logic"
+}
+],
+"mini_tasks": [
+{
+"slug": "return-user-summary-dict",
+"title": "Return a user summary dictionary",
+"prompt": "Write a function named build_user_summary(username, role) that returns a dictionary with username, role, and is_admin. is_admin should be True only when role is 'admin'. Do not print the dictionary inside the function.",
+"acceptance_criteria": [
+"The function returns a dictionary.",
+"The dictionary contains username, role, and is_admin.",
+"is_admin is True only when role equals 'admin'.",
+"The function does not use print as its main output.",
+"A caller variable can receive and reuse the returned dictionary."
+],
+"difficulty": "foundation",
+"concept_tag_slug": "backend-logic"
+},
+{
+"slug": "convert-print-function-to-return",
+"title": "Convert a print-based function into a return-based function",
+"prompt": "Rewrite a function that prints a discount message so it returns the message instead. Example goal: discount_message = build_discount_message('Ayu', 20).",
+"acceptance_criteria": [
+"The function returns a string.",
+"The returned string includes the user name.",
+"The returned string includes the discount percentage.",
+"The caller can store the message in a variable.",
+"The function does not rely on print for its main result."
+],
+"difficulty": "foundation",
+"concept_tag_slug": "return-values"
+}
+]
 }

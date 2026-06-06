@@ -106,3 +106,34 @@ def test_mastery_requires_multiple_proof_points(client, learner_headers):
     mini = client.post(f"/lessons/{lesson_id}/complete-mini-task", headers=learner_headers)
     assert mini.json()["progress"]["status"] == "mastered"
     assert mini.json()["progress"]["mastery_score"] >= 0.95
+
+
+def test_explain_back_accepts_natural_reusable_language_and_repairs_review(
+    client, learner_headers
+):
+    lesson_id = first_lesson_id(client, learner_headers)
+
+    weak = client.post(
+        f"/lessons/{lesson_id}/submit-explain-back",
+        json={"answer": "Return is useful."},
+        headers=learner_headers,
+    )
+    assert weak.status_code == 200
+    assert weak.json()["progress"]["review_required"] is True
+
+    natural = client.post(
+        f"/lessons/{lesson_id}/submit-explain-back",
+        json={
+            "answer": (
+                "With return, the function gives back a value that can be reused "
+                "multiple times when another part of the program calls it. With "
+                "print, the output is only visible once in the console."
+            )
+        },
+        headers=learner_headers,
+    )
+
+    assert natural.status_code == 200
+    progress = natural.json()["progress"]
+    assert progress["explain_back_score"] >= 0.7
+    assert progress["review_required"] is False

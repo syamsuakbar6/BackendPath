@@ -15,7 +15,7 @@ export function FeedbackBox({ feedback }: { feedback: Feedback }) {
           <XCircle size={18} className="text-berry" aria-hidden />
         )}
         <p className="font-medium text-ink">
-          {feedback.is_correct ? "Correct" : "Needs repair"} · score {Math.round(feedback.score * 100)}%
+          {feedback.is_correct ? "Correct" : "Needs repair"} - score {Math.round(feedback.score * 100)}%
         </p>
       </div>
       <div className="mt-3 grid gap-3 text-sm leading-6 text-ink/76">

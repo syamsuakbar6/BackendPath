@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any
 
 from sqlalchemy import func, select
@@ -19,6 +20,41 @@ from app.models import (
     UserConceptMastery,
     UserLessonProgress,
 )
+
+
+CONCEPT_ALIASES = {
+    "return": {
+        "return",
+        "returned",
+        "returning",
+        "give back",
+        "gives back",
+        "provide value",
+        "provided",
+        "value",
+    },
+    "caller": {
+        "caller",
+        "call",
+        "called",
+        "function is called",
+        "use",
+        "using",
+        "reuse",
+        "reusable",
+        "multiple times",
+    },
+    "test": {
+        "test",
+        "testing",
+        "testable",
+        "assert",
+        "verify",
+        "check",
+        "reuse",
+        "reusable",
+    },
+}
 
 
 def utc_now() -> datetime:
@@ -158,17 +194,20 @@ def submit_reflection(db: Session, user: User, lesson_id: int) -> UserLessonProg
 
 
 def score_text_against_concepts(answer: str, expected_concepts: list[str] | None) -> tuple[float, list[str]]:
+    normalized = _normalize_answer(answer)
     if not expected_concepts:
-        return (0.5 if answer.strip() else 0.0), []
+        if not normalized:
+            return 0.0, []
+        return min(0.7, 0.4 + _explain_back_signal_bonus(normalized)), []
 
-    normalized = answer.lower()
-    matched = [
-        concept
-        for concept in expected_concepts
-        if concept.lower().replace("-", " ") in normalized
-        or concept.lower().replace("_", " ") in normalized
-    ]
-    score = len(matched) / len(expected_concepts)
+    matched = []
+    for concept in expected_concepts:
+        terms = _concept_terms(concept)
+        if any(_term_in_answer(normalized, term) for term in terms):
+            matched.append(concept)
+
+    concept_score = len(matched) / len(expected_concepts)
+    score = min(1.0, concept_score + _explain_back_signal_bonus(normalized))
     return round(score, 2), matched
 
 
@@ -204,6 +243,18 @@ def submit_explain_back(
                 question=question,
                 reason="Explain-back missed expected concepts.",
                 is_correct=False,
+            )
+    else:
+        progress.review_required = False
+        for tag in lesson.concept_tags:
+            update_concept_mastery(db, user, tag, is_correct=True)
+            reinforce_existing_review(
+                db,
+                user=user,
+                concept_tag=tag,
+                lesson=lesson,
+                question=question,
+                reason="Explain-back repaired the weak concept; schedule later reinforcement.",
             )
     recompute_progress(progress)
     db.commit()
@@ -366,6 +417,47 @@ def _get_published_lesson_or_404(db: Session, lesson_id: int) -> Lesson:
     if not lesson or lesson.content_status != ContentStatus.published:
         _raise_missing("Lesson")
     return lesson
+
+
+def _normalize_answer(answer: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", " ", answer.lower())
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _concept_terms(concept: str) -> set[str]:
+    normalized = _normalize_answer(concept)
+    return {normalized, *CONCEPT_ALIASES.get(normalized, set())}
+
+
+def _term_in_answer(normalized_answer: str, term: str) -> bool:
+    normalized_term = _normalize_answer(term)
+    if not normalized_term:
+        return False
+    if " " in normalized_term:
+        return normalized_term in normalized_answer
+    return bool(re.search(rf"\b{re.escape(normalized_term)}\b", normalized_answer))
+
+
+def _explain_back_signal_bonus(normalized_answer: str) -> float:
+    bonus = 0.0
+    if _has_any(normalized_answer, {"return", "returned", "returning"}) and _has_any(
+        normalized_answer, {"print", "printed", "console"}
+    ):
+        bonus += 0.12
+    if _has_any(normalized_answer, {"reuse", "reusable", "multiple", "again", "use"}):
+        bonus += 0.12
+    if _has_any(
+        normalized_answer,
+        {"caller", "called", "function", "api", "route", "test", "assert", "verify"},
+    ):
+        bonus += 0.10
+    if len(normalized_answer.split()) >= 18:
+        bonus += 0.05
+    return bonus
+
+
+def _has_any(normalized_answer: str, terms: set[str]) -> bool:
+    return any(_term_in_answer(normalized_answer, term) for term in terms)
 
 
 def _raise_missing(name: str):

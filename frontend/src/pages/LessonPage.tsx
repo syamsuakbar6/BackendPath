@@ -16,6 +16,7 @@ export function LessonPage() {
   const [explainBack, setExplainBack] = useState("");
   const [explainFeedback, setExplainFeedback] = useState<Feedback | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<{ name: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!lessonId) return;
@@ -35,12 +36,17 @@ export function LessonPage() {
     setLesson((current) => (current ? { ...current, progress } : current));
   }
 
-  async function runAction(name: string, action: () => Promise<{ progress: LessonProgress }>) {
+  async function runAction(
+    name: string,
+    action: () => Promise<{ progress: LessonProgress; message: string }>
+  ) {
     setBusyAction(name);
     setError(null);
+    setActionNotice(null);
     try {
       const response = await action();
       updateProgress(response.progress);
+      setActionNotice({ name, message: response.message });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Action failed.");
     } finally {
@@ -55,6 +61,7 @@ export function LessonPage() {
     }
     setBusyAction("explain");
     setExplainFeedback(null);
+    setActionNotice(null);
     try {
       const response = await api.submitExplainBack(lessonId, explainBack);
       updateProgress(response.progress);
@@ -68,7 +75,10 @@ export function LessonPage() {
         correct_concept: explainQuestion?.expected_concepts?.join(", ") ?? "lesson concept",
         simple_example: explainQuestion?.sample_ideal_answer ?? lesson?.why_it_matters ?? "",
         remedial_question: explainQuestion?.remedial_prompt ?? "Which part would matter in a real API route?",
-        explanation: "Matched against the placeholder rubric.",
+        explanation:
+          score >= 0.7
+            ? "Accepted by the placeholder rubric. This is still heuristic, not AI grading."
+            : "Matched against the placeholder rubric.",
         review_scheduled: score < 0.7
       });
     } catch (err) {
@@ -108,26 +118,30 @@ export function LessonPage() {
             {Math.round((progress?.mastery_score ?? 0) * 100)}%
           </div>
         </div>
+        <ProofProgress progress={progress} />
         <div className="mt-5 flex flex-wrap gap-2">
           <button
             className="focus-ring inline-flex h-10 items-center gap-2 rounded-md bg-ink px-4 text-sm font-medium text-white disabled:opacity-60"
             onClick={() => runAction("start", () => api.startLesson(lesson.id))}
-            disabled={busyAction === "start"}
+            disabled={busyAction === "start" || Boolean(progress)}
             type="button"
           >
             <BookOpen size={16} aria-hidden />
-            Start
+            {progress ? "Started" : "Start"}
           </button>
           <button
             className="focus-ring inline-flex h-10 items-center gap-2 rounded-md border border-line bg-white px-4 text-sm font-medium text-ink disabled:opacity-60"
             onClick={() => runAction("reading", () => api.completeReading(lesson.id))}
-            disabled={busyAction === "reading"}
+            disabled={busyAction === "reading" || Boolean(progress?.reading_completed)}
             type="button"
           >
             <CheckCircle2 size={16} aria-hidden />
-            Reading done
+            {progress?.reading_completed ? "Reading recorded" : "Finish reading"}
           </button>
         </div>
+        {actionNotice && ["start", "reading"].includes(actionNotice.name) ? (
+          <ActionNotice message={actionNotice.message} />
+        ) : null}
         {error ? <p className="mt-4 text-sm text-berry">{error}</p> : null}
       </header>
 
@@ -182,12 +196,14 @@ export function LessonPage() {
               <code>{task.broken_code}</code>
             </pre>
             <button
-              className="focus-ring mt-4 h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-ink"
+              className="focus-ring mt-4 h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-ink disabled:opacity-60"
               onClick={() => runAction("debug", () => api.completeDebugTask(lesson.id))}
+              disabled={busyAction === "debug" || Boolean(progress?.debug_task_completed)}
               type="button"
             >
-              Mark debug proof
+              {progress?.debug_task_completed ? "Debug proof recorded" : "Mark debug proof"}
             </button>
+            {actionNotice?.name === "debug" ? <ActionNotice message={actionNotice.message} /> : null}
           </div>
         ))}
         {lesson.mini_tasks.map((task) => (
@@ -208,12 +224,14 @@ export function LessonPage() {
               </ul>
             ) : null}
             <button
-              className="focus-ring mt-4 h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-ink"
+              className="focus-ring mt-4 h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-ink disabled:opacity-60"
               onClick={() => runAction("mini", () => api.completeMiniTask(lesson.id))}
+              disabled={busyAction === "mini" || Boolean(progress?.mini_task_completed)}
               type="button"
             >
-              Mark mini proof
+              {progress?.mini_task_completed ? "Mini proof recorded" : "Mark mini proof"}
             </button>
+            {actionNotice?.name === "mini" ? <ActionNotice message={actionNotice.message} /> : null}
           </div>
         ))}
       </section>
@@ -224,13 +242,67 @@ export function LessonPage() {
           <p className="mt-1 text-sm text-ink/65">Reflection records attention, but mastery still depends on proof points.</p>
         </div>
         <button
-          className="focus-ring h-10 rounded-md bg-teal px-4 text-sm font-medium text-white"
+          className="focus-ring h-10 rounded-md bg-teal px-4 text-sm font-medium text-white disabled:opacity-60"
           onClick={() => runAction("reflection", () => api.submitReflection(lesson.id))}
+          disabled={busyAction === "reflection" || Boolean(progress?.reflection_submitted)}
           type="button"
         >
-          Record reflection
+          {progress?.reflection_submitted ? "Reflection recorded" : "Record reflection"}
         </button>
       </section>
+      {actionNotice?.name === "reflection" ? <ActionNotice message={actionNotice.message} /> : null}
     </div>
+  );
+}
+
+function ProofProgress({ progress }: { progress?: LessonProgress | null }) {
+  const items = [
+    { label: "Reading", done: Boolean(progress?.reading_completed) },
+    { label: "Quick check", done: (progress?.quick_check_score ?? 0) >= 0.7 },
+    { label: "Explain-back", done: (progress?.explain_back_score ?? 0) >= 0.7 },
+    { label: "Debug", done: Boolean(progress?.debug_task_completed) },
+    { label: "Mini task", done: Boolean(progress?.mini_task_completed) },
+    { label: "Reflection", done: Boolean(progress?.reflection_submitted) }
+  ];
+
+  return (
+    <div className="mt-5 rounded-md border border-line bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium text-ink">Proof point status</p>
+        <p className="text-xs text-ink/55">
+          {items.filter((item) => item.done).length} of {items.length} recorded
+        </p>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {items.map((item) => (
+          <div
+            key={item.label}
+            className={`flex min-h-10 items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+              item.done
+                ? "border-moss/30 bg-moss/10 text-ink"
+                : "border-line bg-paper text-ink/60"
+            }`}
+          >
+            <CheckCircle2
+              size={16}
+              className={item.done ? "text-moss" : "text-ink/25"}
+              aria-hidden
+            />
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ActionNotice({ message }: { message: string }) {
+  return (
+    <p
+      className="mt-3 rounded-md border border-moss/30 bg-moss/10 px-3 py-2 text-sm text-ink"
+      aria-live="polite"
+    >
+      {message}
+    </p>
   );
 }
