@@ -27,6 +27,18 @@ class ProofStatus(str, Enum):
     strong = "strong"
 
 
+class ProofFinalStatus(str, Enum):
+    accepted = "accepted"
+    rejected = "rejected"
+    needs_review = "needs_review"
+
+
+class EvaluationConfidence(str, Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
 class ScoreLabel(str, Enum):
     incorrect = "incorrect"
     weak = "weak"

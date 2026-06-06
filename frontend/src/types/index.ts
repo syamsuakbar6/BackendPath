@@ -9,6 +9,8 @@ export type SkillStrength = "not_started" | "learning" | "weak" | "stable" | "st
 export type ContentStatus = "draft" | "published" | "archived";
 export type ProofType = "explain_back" | "debug_task" | "mini_task" | "reflection" | "review";
 export type ProofStatus = "submitted" | "needs_revision" | "passed" | "strong";
+export type ProofFinalStatus = "accepted" | "rejected" | "needs_review";
+export type EvaluationConfidence = "low" | "medium" | "high";
 export type ScoreLabel = "incorrect" | "weak" | "stable" | "strong";
 export type BlockType =
   | "text"
@@ -221,8 +223,10 @@ export interface Feedback {
 export interface ProofFeedback {
   correct_points: string[];
   missing_points: string[];
+  misconceptions: string[];
   feedback: string;
   remedial_question: string;
+  evaluation_source: "heuristic" | string;
 }
 
 export interface ProofSubmission {
@@ -239,6 +243,18 @@ export interface ProofSubmission {
   score_label?: ScoreLabel | null;
   score_numeric?: number | null;
   feedback_json?: ProofFeedback | null;
+  heuristic_status?: ProofStatus | null;
+  heuristic_score_label?: ScoreLabel | null;
+  heuristic_score_numeric?: number | null;
+  heuristic_feedback_json?: ProofFeedback | null;
+  evaluation_confidence?: EvaluationConfidence | null;
+  final_evaluation_status?: ProofFinalStatus | null;
+  final_score_label?: ScoreLabel | null;
+  final_score_numeric?: number | null;
+  final_feedback_json?: ProofFeedback | null;
+  overridden_by_id?: number | null;
+  overridden_at?: string | null;
+  override_note?: string | null;
   attempt_number: number;
   created_at: string;
   evaluated_at?: string | null;
@@ -257,6 +273,83 @@ export interface ProofSubmissionResponse {
   submission: ProofSubmission;
   progress: LessonProgress;
   message: string;
+}
+
+export interface AdminProofSubmission {
+  id: number;
+  user: {
+    id: number;
+    email: string;
+    full_name: string;
+    role: UserRole;
+  };
+  lesson: {
+    id: number;
+    title: string;
+    slug: string;
+  };
+  proof_type: ProofType;
+  question_id?: number | null;
+  debug_task_id?: number | null;
+  mini_task_id?: number | null;
+  answer_text?: string | null;
+  code_text?: string | null;
+  status: ProofStatus;
+  score_label?: ScoreLabel | null;
+  score_numeric?: number | null;
+  feedback_json?: ProofFeedback | null;
+  heuristic_status?: ProofStatus | null;
+  heuristic_score_label?: ScoreLabel | null;
+  heuristic_score_numeric?: number | null;
+  heuristic_feedback_json?: ProofFeedback | null;
+  evaluation_confidence?: EvaluationConfidence | null;
+  final_evaluation_status?: ProofFinalStatus | null;
+  final_score_label?: ScoreLabel | null;
+  final_score_numeric?: number | null;
+  final_feedback_json?: ProofFeedback | null;
+  overridden_by_id?: number | null;
+  overridden_by_email?: string | null;
+  overridden_at?: string | null;
+  override_note?: string | null;
+  attempt_number: number;
+  created_at: string;
+  evaluated_at?: string | null;
+  created_review_item: boolean;
+  review_item_ids: number[];
+}
+
+export interface AdminProofFilters {
+  user_id?: string;
+  lesson_id?: string;
+  proof_type?: ProofType | "";
+  status?: ProofStatus | "";
+  score_label?: ScoreLabel | "";
+}
+
+export interface AdminProofOverrideRequest {
+  final_status: ProofFinalStatus;
+  override_note: string;
+  score_label?: ScoreLabel | "";
+}
+
+export interface ProofEvaluationAnalytics {
+  total_submissions: number;
+  count_by_proof_type: Record<string, number>;
+  count_by_final_status: Record<string, number>;
+  count_by_heuristic_status: Record<string, number>;
+  count_by_confidence: Record<string, number>;
+  count_by_score_label: Record<string, number>;
+  override_count: number;
+  override_rate: number;
+  top_lessons_with_rejected_or_needs_review: Array<{
+    lesson_id: number;
+    lesson_title: string;
+    count: number;
+  }>;
+  top_misconceptions: Array<{
+    misconception: string;
+    count: number;
+  }>;
 }
 
 export interface QuestionAnswerResponse {
@@ -302,6 +395,7 @@ export interface ReviewSubmissionResponse {
   status: ProofStatus;
   score_label: ScoreLabel;
   score_numeric: number;
+  evaluation_confidence: EvaluationConfidence;
   feedback_json: ProofFeedback;
   progress?: LessonProgress | null;
   next_due_for_review?: string | null;

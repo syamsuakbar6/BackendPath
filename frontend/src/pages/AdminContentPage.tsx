@@ -2,19 +2,28 @@ import {
   Archive,
   Bug,
   CheckCircle2,
+  BarChart3,
   ClipboardCheck,
   Database,
   Eye,
   FileDown,
   FileUp,
   Lightbulb,
+  ListFilter,
   Plus,
-  Send
+  Send,
+  ShieldCheck
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { LessonBlockRenderer } from "../components/LessonBlockRenderer";
-import type { LessonDetail } from "../types";
+import type {
+  AdminProofFilters,
+  AdminProofOverrideRequest,
+  AdminProofSubmission,
+  LessonDetail,
+  ProofEvaluationAnalytics
+} from "../types";
 
 const resources = [
   "languages",
@@ -137,6 +146,15 @@ export function AdminContentPage() {
   const [lessonJson, setLessonJson] = useState("");
   const [preview, setPreview] = useState<LessonDetail | null>(null);
   const [exportedJson, setExportedJson] = useState("");
+  const [proofFilters, setProofFilters] = useState<AdminProofFilters>({});
+  const [proofSubmissions, setProofSubmissions] = useState<AdminProofSubmission[]>([]);
+  const [selectedProof, setSelectedProof] = useState<AdminProofSubmission | null>(null);
+  const [proofAnalytics, setProofAnalytics] = useState<ProofEvaluationAnalytics | null>(null);
+  const [overrideDraft, setOverrideDraft] = useState<AdminProofOverrideRequest>({
+    final_status: "needs_review",
+    override_note: "",
+    score_label: ""
+  });
 
   const sample = useMemo(() => JSON.stringify(samples[resource] ?? {}, null, 2), [resource]);
 
@@ -150,6 +168,8 @@ export function AdminContentPage() {
 
   useEffect(() => {
     loadLessons();
+    loadProofSubmissions();
+    loadProofAnalytics();
   }, []);
 
   async function load() {
@@ -240,6 +260,52 @@ export function AdminContentPage() {
     }
   }
 
+  async function loadProofSubmissions(filters: AdminProofFilters = proofFilters) {
+    try {
+      const data = await api.adminProofSubmissions(filters);
+      setProofSubmissions(data);
+      setSelectedProof(data[0] ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load proof submissions.");
+    }
+  }
+
+  async function loadProofAnalytics() {
+    try {
+      setProofAnalytics(await api.adminProofEvaluationAnalytics());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load proof analytics.");
+    }
+  }
+
+  async function applyProofFilters(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSelectedProof(null);
+    await loadProofSubmissions(proofFilters);
+  }
+
+  function updateProofFilter(key: keyof AdminProofFilters, value: string) {
+    setProofFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submitOverride(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedProof) return;
+    setError(null);
+    setMessage(null);
+    try {
+      const updated = await api.adminOverrideProofSubmission(selectedProof.id, overrideDraft);
+      setSelectedProof(updated);
+      setProofSubmissions((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setMessage("Proof evaluation override saved.");
+      setOverrideDraft({ final_status: "needs_review", override_note: "", score_label: "" });
+      await loadProofAnalytics();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Override failed.");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <div>
@@ -323,6 +389,108 @@ export function AdminContentPage() {
         </button>
       </form>
 
+      <section className="panel mt-6 p-5">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={18} className="text-teal" aria-hidden />
+          <h2 className="font-semibold text-ink">Proof submissions</h2>
+        </div>
+        {proofAnalytics ? <ProofAnalyticsSummary analytics={proofAnalytics} /> : null}
+        <form className="mt-4 grid gap-3 md:grid-cols-6" onSubmit={applyProofFilters}>
+          <input
+            className="focus-ring h-10 rounded-md border border-line bg-white px-3 text-sm"
+            placeholder="User ID"
+            value={proofFilters.user_id ?? ""}
+            onChange={(event) => updateProofFilter("user_id", event.target.value)}
+          />
+          <input
+            className="focus-ring h-10 rounded-md border border-line bg-white px-3 text-sm"
+            placeholder="Lesson ID"
+            value={proofFilters.lesson_id ?? ""}
+            onChange={(event) => updateProofFilter("lesson_id", event.target.value)}
+          />
+          <select
+            className="focus-ring h-10 rounded-md border border-line bg-white px-3 text-sm"
+            value={proofFilters.proof_type ?? ""}
+            onChange={(event) => updateProofFilter("proof_type", event.target.value)}
+          >
+            <option value="">Proof type</option>
+            <option value="explain_back">Explain-back</option>
+            <option value="debug_task">Debug task</option>
+            <option value="mini_task">Mini task</option>
+            <option value="reflection">Reflection</option>
+            <option value="review">Review</option>
+          </select>
+          <select
+            className="focus-ring h-10 rounded-md border border-line bg-white px-3 text-sm"
+            value={proofFilters.status ?? ""}
+            onChange={(event) => updateProofFilter("status", event.target.value)}
+          >
+            <option value="">Status</option>
+            <option value="submitted">Submitted</option>
+            <option value="needs_revision">Needs revision</option>
+            <option value="passed">Passed</option>
+            <option value="strong">Strong</option>
+          </select>
+          <select
+            className="focus-ring h-10 rounded-md border border-line bg-white px-3 text-sm"
+            value={proofFilters.score_label ?? ""}
+            onChange={(event) => updateProofFilter("score_label", event.target.value)}
+          >
+            <option value="">Score label</option>
+            <option value="incorrect">Incorrect</option>
+            <option value="weak">Weak</option>
+            <option value="stable">Stable</option>
+            <option value="strong">Strong</option>
+          </select>
+          <button className="focus-ring inline-flex h-10 items-center justify-center gap-2 rounded-md bg-ink px-3 text-sm font-medium text-white">
+            <ListFilter size={16} aria-hidden />
+            Filter
+          </button>
+        </form>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+          <div className="max-h-[420px] overflow-auto rounded-md border border-line bg-paper">
+            {proofSubmissions.length ? (
+              proofSubmissions.map((proof) => (
+                <button
+                  key={proof.id}
+                  type="button"
+                  className={`block w-full border-b border-line px-4 py-3 text-left text-sm ${
+                    selectedProof?.id === proof.id ? "bg-teal/10" : "bg-transparent hover:bg-white"
+                  }`}
+                  onClick={() => setSelectedProof(proof)}
+                >
+                  <span className="font-medium text-ink">{proof.proof_type.replace("_", " ")}</span>
+                  <span className="ml-2 text-ink/55">#{proof.id}</span>
+                  <span className="mt-1 block text-xs text-ink/60">
+                    {proof.user.email} - {proof.lesson.title}
+                  </span>
+                  <span className="mt-1 block text-xs text-ink/60">
+                    {proof.status} / {proof.score_label ?? "unscored"}
+                    {proof.created_review_item ? " - review item created" : ""}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="p-4 text-sm text-ink/65">No proof submissions found.</p>
+            )}
+          </div>
+
+          <div className="rounded-md border border-line bg-paper p-4">
+            {selectedProof ? (
+              <ProofSubmissionDetail
+                proof={selectedProof}
+                overrideDraft={overrideDraft}
+                setOverrideDraft={setOverrideDraft}
+                onSubmitOverride={submitOverride}
+              />
+            ) : (
+              <p className="text-sm text-ink/65">Select a proof submission.</p>
+            )}
+          </div>
+        </div>
+      </section>
+
       <section className="mt-6 grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
         <form className="panel p-5" onSubmit={submit}>
           <div className="flex items-center gap-2">
@@ -353,6 +521,157 @@ export function AdminContentPage() {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function ProofAnalyticsSummary({ analytics }: { analytics: ProofEvaluationAnalytics }) {
+  return (
+    <div className="mt-4 rounded-md border border-line bg-paper p-4">
+      <div className="flex items-center gap-2">
+        <BarChart3 size={18} className="text-amber" aria-hidden />
+        <h3 className="font-semibold text-ink">Evaluation analytics</h3>
+      </div>
+      <div className="mt-3 grid gap-3 md:grid-cols-4">
+        <Metric label="Total" value={analytics.total_submissions} />
+        <Metric label="Overrides" value={analytics.override_count} />
+        <Metric label="Override rate" value={`${Math.round(analytics.override_rate * 100)}%`} />
+        <Metric label="Low confidence" value={analytics.count_by_confidence.low ?? 0} />
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <MiniStats title="Final status" values={analytics.count_by_final_status} />
+        <MiniStats title="Proof types" values={analytics.count_by_proof_type} />
+        <MiniStats title="Confidence" values={analytics.count_by_confidence} />
+      </div>
+      {analytics.top_lessons_with_rejected_or_needs_review.length ? (
+        <div className="mt-4 rounded-md border border-line bg-white p-3">
+          <p className="text-sm font-medium text-ink">Top lessons needing review</p>
+          <div className="mt-2 grid gap-1 text-sm text-ink/70">
+            {analytics.top_lessons_with_rejected_or_needs_review.map((item) => (
+              <span key={item.lesson_id}>{item.lesson_title}: {item.count}</span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md border border-line bg-white p-3">
+      <p className="text-xs uppercase text-ink/45">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-ink">{value}</p>
+    </div>
+  );
+}
+
+function MiniStats({ title, values }: { title: string; values: Record<string, number> }) {
+  return (
+    <div className="rounded-md border border-line bg-white p-3">
+      <p className="text-sm font-medium text-ink">{title}</p>
+      <div className="mt-2 grid gap-1 text-sm text-ink/70">
+        {Object.entries(values).length ? (
+          Object.entries(values).map(([key, value]) => <span key={key}>{key}: {value}</span>)
+        ) : (
+          <span>None yet</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProofSubmissionDetail({
+  proof,
+  overrideDraft,
+  setOverrideDraft,
+  onSubmitOverride
+}: {
+  proof: AdminProofSubmission;
+  overrideDraft: AdminProofOverrideRequest;
+  setOverrideDraft: (value: AdminProofOverrideRequest) => void;
+  onSubmitOverride: (event: FormEvent) => void;
+}) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-teal">Submission #{proof.id}</p>
+          <h3 className="mt-1 text-lg font-semibold text-ink">{proof.proof_type.replace("_", " ")}</h3>
+          <p className="mt-1 text-sm text-ink/65">{proof.user.email} - {proof.lesson.title}</p>
+        </div>
+        <span className="rounded-md border border-line bg-white px-2 py-1 text-xs text-ink/65">
+          {proof.final_evaluation_status ?? "unknown"} / {proof.final_score_label ?? "unscored"}
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 text-sm text-ink/75 md:grid-cols-2">
+        <p>Heuristic: {proof.heuristic_status ?? proof.status} / {proof.heuristic_score_label ?? "unscored"}</p>
+        <p>Final: {proof.final_evaluation_status ?? "unknown"} / {proof.final_score_label ?? "unscored"}</p>
+        <p>Confidence: {proof.evaluation_confidence ?? "unknown"}</p>
+        <p>Final score: {proof.final_score_numeric ?? proof.score_numeric ?? "not evaluated"}</p>
+        <p>Attempt: {proof.attempt_number}</p>
+        <p>Created: {new Date(proof.created_at).toLocaleString()}</p>
+        <p>Evaluated: {proof.evaluated_at ? new Date(proof.evaluated_at).toLocaleString() : "not evaluated"}</p>
+        <p>Review item: {proof.created_review_item ? proof.review_item_ids.join(", ") : "none"}</p>
+        <p>Override: {proof.override_note ? `${proof.override_note} (${proof.overridden_by_email ?? "admin"})` : "none"}</p>
+      </div>
+      {proof.answer_text ? (
+        <div className="mt-4 rounded-md border border-line bg-white p-3">
+          <p className="text-xs font-medium uppercase text-ink/45">Answer</p>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink/75">{proof.answer_text}</p>
+        </div>
+      ) : null}
+      {proof.code_text ? (
+        <pre className="mt-4 overflow-auto rounded-md bg-ink p-3 text-xs leading-5 text-white">
+          <code>{proof.code_text}</code>
+        </pre>
+      ) : null}
+      <div className="mt-4 rounded-md border border-line bg-white p-3">
+        <p className="text-xs font-medium uppercase text-ink/45">Heuristic feedback JSON</p>
+        <pre className="mt-2 overflow-auto text-xs leading-5 text-ink/75">
+          {JSON.stringify(proof.heuristic_feedback_json ?? proof.feedback_json, null, 2)}
+        </pre>
+      </div>
+      <div className="mt-4 rounded-md border border-line bg-white p-3">
+        <p className="text-xs font-medium uppercase text-ink/45">Final feedback JSON</p>
+        <pre className="mt-2 overflow-auto text-xs leading-5 text-ink/75">
+          {JSON.stringify(proof.final_feedback_json ?? proof.feedback_json, null, 2)}
+        </pre>
+      </div>
+      <form className="mt-4 rounded-md border border-line bg-white p-3" onSubmit={onSubmitOverride}>
+        <p className="text-sm font-medium text-ink">Admin override</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <select
+            className="focus-ring h-10 rounded-md border border-line bg-white px-3 text-sm"
+            value={overrideDraft.final_status}
+            onChange={(event) => setOverrideDraft({ ...overrideDraft, final_status: event.target.value as AdminProofOverrideRequest["final_status"] })}
+          >
+            <option value="accepted">Accepted</option>
+            <option value="rejected">Rejected</option>
+            <option value="needs_review">Needs review</option>
+          </select>
+          <select
+            className="focus-ring h-10 rounded-md border border-line bg-white px-3 text-sm"
+            value={overrideDraft.score_label ?? ""}
+            onChange={(event) => setOverrideDraft({ ...overrideDraft, score_label: event.target.value as AdminProofOverrideRequest["score_label"] })}
+          >
+            <option value="">Score label optional</option>
+            <option value="incorrect">Incorrect</option>
+            <option value="weak">Weak</option>
+            <option value="stable">Stable</option>
+            <option value="strong">Strong</option>
+          </select>
+        </div>
+        <textarea
+          className="focus-ring mt-3 min-h-24 w-full rounded-md border border-line bg-paper p-3 text-sm"
+          value={overrideDraft.override_note}
+          onChange={(event) => setOverrideDraft({ ...overrideDraft, override_note: event.target.value })}
+          placeholder="Why are you overriding this evaluation?"
+        />
+        <button className="focus-ring mt-3 h-10 rounded-md bg-ink px-4 text-sm font-medium text-white">
+          Save override
+        </button>
+      </form>
     </div>
   );
 }

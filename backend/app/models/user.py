@@ -33,6 +33,10 @@ class User(Base):
 
     lesson_progress = relationship("UserLessonProgress", back_populates="user")
     question_attempts = relationship("UserQuestionAttempt", back_populates="user")
-    proof_submissions = relationship("UserProofSubmission", back_populates="user")
+    proof_submissions = relationship(
+        "UserProofSubmission",
+        back_populates="user",
+        foreign_keys="UserProofSubmission.user_id",
+    )
     concept_mastery = relationship("UserConceptMastery", back_populates="user")
     review_items = relationship("ReviewItem", back_populates="user")

@@ -1,5 +1,8 @@
 import type {
   AuthResponse,
+  AdminProofFilters,
+  AdminProofOverrideRequest,
+  AdminProofSubmission,
   Dashboard,
   Language,
   LessonDetail,
@@ -12,6 +15,7 @@ import type {
   ReviewItem,
   ReviewSubmissionRequest,
   ReviewSubmissionResponse,
+  ProofEvaluationAnalytics,
   SearchResponse,
   Track,
   TrackDetail,
@@ -206,5 +210,28 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload)
     });
+  },
+  adminProofSubmissions(filters: AdminProofFilters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, String(value));
+    });
+    const query = params.toString();
+    return request<AdminProofSubmission[]>(`/admin/proof-submissions${query ? `?${query}` : ""}`);
+  },
+  adminProofSubmission(id: number) {
+    return request<AdminProofSubmission>(`/admin/proof-submissions/${id}`);
+  },
+  adminOverrideProofSubmission(id: number, payload: AdminProofOverrideRequest) {
+    return request<AdminProofSubmission>(`/admin/proof-submissions/${id}/override`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        ...payload,
+        score_label: payload.score_label || null
+      })
+    });
+  },
+  adminProofEvaluationAnalytics() {
+    return request<ProofEvaluationAnalytics>("/admin/proof-evaluation-analytics");
   }
 };

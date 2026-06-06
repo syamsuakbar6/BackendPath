@@ -19,7 +19,15 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.session import Base
-from app.models.enums import LessonStatus, ProofStatus, ProofType, ScoreLabel, SkillStrength
+from app.models.enums import (
+    EvaluationConfidence,
+    LessonStatus,
+    ProofFinalStatus,
+    ProofStatus,
+    ProofType,
+    ScoreLabel,
+    SkillStrength,
+)
 from app.models.user import enum_values
 
 
@@ -99,17 +107,40 @@ class UserProofSubmission(Base):
     )
     score_numeric: Mapped[float | None] = mapped_column(Float)
     feedback_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    heuristic_status: Mapped[ProofStatus | None] = mapped_column(
+        SAEnum(ProofStatus, values_callable=enum_values, native_enum=False),
+    )
+    heuristic_score_label: Mapped[ScoreLabel | None] = mapped_column(
+        SAEnum(ScoreLabel, values_callable=enum_values, native_enum=False),
+    )
+    heuristic_score_numeric: Mapped[float | None] = mapped_column(Float)
+    heuristic_feedback_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    evaluation_confidence: Mapped[EvaluationConfidence | None] = mapped_column(
+        SAEnum(EvaluationConfidence, values_callable=enum_values, native_enum=False),
+    )
+    final_evaluation_status: Mapped[ProofFinalStatus | None] = mapped_column(
+        SAEnum(ProofFinalStatus, values_callable=enum_values, native_enum=False),
+    )
+    final_score_label: Mapped[ScoreLabel | None] = mapped_column(
+        SAEnum(ScoreLabel, values_callable=enum_values, native_enum=False),
+    )
+    final_score_numeric: Mapped[float | None] = mapped_column(Float)
+    final_feedback_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    overridden_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    overridden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    override_note: Mapped[str | None] = mapped_column(Text)
     attempt_number: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    user = relationship("User", back_populates="proof_submissions")
+    user = relationship("User", back_populates="proof_submissions", foreign_keys=[user_id])
     lesson = relationship("Lesson")
     question = relationship("Question")
     debug_task = relationship("DebugTask")
     mini_task = relationship("MiniTask")
+    overridden_by = relationship("User", foreign_keys=[overridden_by_id])
 
 
 class UserConceptMastery(Base):

@@ -13,7 +13,7 @@ from app.models import (
     DebugTask,
     Lesson,
     MiniTask,
-    ProofStatus,
+    ProofFinalStatus,
     ProofType,
     Question,
     ReviewItem,
@@ -28,12 +28,16 @@ from app.services.progress import (
     get_or_create_progress,
     lesson_has_due_review,
     recompute_progress,
-    score_text_against_concepts,
     serialize_review_item,
     update_concept_mastery,
     utc_now,
 )
-from app.services.proofs import PASSING_STATUSES, evaluate_proof, has_latest_failed_proof
+from app.services.proofs import (
+    PASSING_STATUSES,
+    evaluate_conceptual_answer,
+    evaluate_proof,
+    has_latest_failed_proof,
+)
 
 
 def submit_review_answer(
@@ -82,6 +86,7 @@ def submit_review_answer(
         "status": evaluation["status"],
         "score_label": evaluation["score_label"],
         "score_numeric": evaluation["score_numeric"],
+        "evaluation_confidence": evaluation["confidence"],
         "feedback_json": evaluation["feedback_json"],
         "progress": progress,
         "next_due_for_review": next_due_for_review,
@@ -137,34 +142,14 @@ def _evaluate_review_answer(review: ReviewItem, payload: ReviewSubmissionRequest
 
 def _evaluate_concept_review(review: ReviewItem, answer: str, code: str) -> dict[str, Any]:
     combined = f"{answer}\n{code}".strip()
-    if len(combined) < 12:
-        return _result(
-            score=0.0,
-            correct_points=[],
-            missing_points=["Write a focused answer before this review can be resolved."],
-            feedback="A review answer should repair the weak idea, not just acknowledge it.",
-            remedial_question="Can you explain the corrected concept with one small backend example?",
-        )
-
     expected = _expected_review_concepts(review)
-    score, matched = score_text_against_concepts(combined, expected)
-    missing = [concept for concept in expected if concept not in matched]
-    if not expected and len(_normalize(combined).split()) >= 14:
-        score = 0.75
-
-    if score >= 0.85:
-        feedback = "Your review answer repairs the weak concept and connects it back to practice."
-    elif score >= 0.7:
-        feedback = "Your review answer repairs the main weak concept."
-    else:
-        feedback = "This still misses one or more concepts from the previous feedback."
-
-    return _result(
-        score=score,
-        correct_points=[f"Recovered concept: {concept}" for concept in matched],
-        missing_points=[f"Still missing: {concept}" for concept in missing],
-        feedback=feedback,
+    return evaluate_conceptual_answer(
+        answer=combined,
+        expected_concepts=expected,
         remedial_question=_remedial_question(review),
+        misconception_notes=review.question.misconception_notes if review.question else None,
+        passing_feedback="Your review answer repairs the weak concept and connects it back to practice.",
+        weak_feedback="This still misses one or more concepts from the previous feedback.",
     )
 
 
@@ -172,6 +157,8 @@ def _expected_review_concepts(review: ReviewItem) -> list[str]:
     concepts: list[str] = []
     feedback = review.proof_submission.feedback_json if review.proof_submission else None
     for point in (feedback or {}).get("missing_points", []):
+        if not re.match(r"^(missing concept|still missing):\s*", str(point), flags=re.I):
+            continue
         cleaned = re.sub(r"^(missing concept|still missing):\s*", "", str(point), flags=re.I).strip()
         if cleaned and cleaned not in concepts:
             concepts.append(cleaned)
@@ -199,6 +186,10 @@ def _record_passed_review(
         submission.score_label = evaluation["score_label"]
         submission.score_numeric = evaluation["score_numeric"]
         submission.feedback_json = evaluation["feedback_json"]
+        submission.final_evaluation_status = ProofFinalStatus.accepted
+        submission.final_score_label = evaluation["score_label"]
+        submission.final_score_numeric = evaluation["score_numeric"]
+        submission.final_feedback_json = evaluation["feedback_json"]
         submission.evaluated_at = utc_now()
         _apply_repaired_submission(review, submission)
         _resolve_sibling_reviews(db, user, review, submission.id)
@@ -284,40 +275,3 @@ def _remedial_question(review: ReviewItem) -> str:
     if review.debug_task and review.debug_task.hint:
         return review.debug_task.hint
     return "Can you explain the corrected concept with one small backend example?"
-
-
-def _result(
-    score: float,
-    correct_points: list[str],
-    missing_points: list[str],
-    feedback: str,
-    remedial_question: str,
-) -> dict[str, Any]:
-    if score >= 0.85:
-        proof_status = ProofStatus.strong
-        score_label = ScoreLabel.strong
-    elif score >= 0.7:
-        proof_status = ProofStatus.passed
-        score_label = ScoreLabel.stable
-    elif score > 0:
-        proof_status = ProofStatus.needs_revision
-        score_label = ScoreLabel.weak
-    else:
-        proof_status = ProofStatus.needs_revision
-        score_label = ScoreLabel.incorrect
-    return {
-        "status": proof_status,
-        "score_label": score_label,
-        "score_numeric": round(score, 2),
-        "feedback_json": {
-            "correct_points": correct_points,
-            "missing_points": missing_points,
-            "feedback": feedback,
-            "remedial_question": remedial_question,
-        },
-    }
-
-
-def _normalize(value: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower())
-    return re.sub(r"\s+", " ", normalized).strip()

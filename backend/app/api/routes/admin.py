@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from typing import Any, Type
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -10,16 +11,28 @@ from app.models import (
     ConceptTag,
     ContentStatus,
     DebugTask,
+    EvaluationConfidence,
     Language,
     Lesson,
     LessonBlock,
     Level,
     MiniTask,
     Module,
+    ProofFinalStatus,
+    ProofStatus,
+    ProofType,
     Question,
     QuestionOption,
+    ReviewItem,
+    ScoreLabel,
     Track,
     User,
+    UserProofSubmission,
+)
+from app.schemas.progress import (
+    AdminProofOverrideRequest,
+    AdminProofSubmissionOut,
+    ProofEvaluationAnalyticsOut,
 )
 from app.schemas.learning import (
     ConceptTagCreate,
@@ -57,9 +70,105 @@ from app.services.content import (
     publish_lesson,
     validate_lesson_publishable,
 )
+from app.services.progress import get_or_create_progress, recompute_progress
+from app.services.proofs import PASSING_STATUSES, has_latest_failed_proof
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+@router.get("/proof-submissions", response_model=list[AdminProofSubmissionOut])
+def admin_proof_submissions(
+    user_id: int | None = Query(default=None),
+    lesson_id: int | None = Query(default=None),
+    proof_type: ProofType | None = Query(default=None),
+    status_filter: ProofStatus | None = Query(default=None, alias="status"),
+    score_label: ScoreLabel | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> list[dict]:
+    stmt = (
+        select(UserProofSubmission)
+        .options(
+            selectinload(UserProofSubmission.user),
+            selectinload(UserProofSubmission.lesson),
+            selectinload(UserProofSubmission.overridden_by),
+        )
+        .order_by(UserProofSubmission.created_at.desc(), UserProofSubmission.id.desc())
+    )
+    if user_id is not None:
+        stmt = stmt.where(UserProofSubmission.user_id == user_id)
+    if lesson_id is not None:
+        stmt = stmt.where(UserProofSubmission.lesson_id == lesson_id)
+    if proof_type is not None:
+        stmt = stmt.where(UserProofSubmission.proof_type == proof_type)
+    if status_filter is not None:
+        stmt = stmt.where(UserProofSubmission.status == status_filter)
+    if score_label is not None:
+        stmt = stmt.where(UserProofSubmission.final_score_label == score_label)
+
+    submissions = list(db.scalars(stmt))
+    review_ids = _review_ids_by_proof_submission(db, [item.id for item in submissions])
+    return [_serialize_admin_proof_submission(item, review_ids.get(item.id, [])) for item in submissions]
+
+
+@router.get("/proof-evaluation-analytics", response_model=ProofEvaluationAnalyticsOut)
+def admin_proof_evaluation_analytics(
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    submissions = list(
+        db.scalars(
+            select(UserProofSubmission).options(selectinload(UserProofSubmission.lesson))
+        )
+    )
+    return _build_proof_evaluation_analytics(submissions)
+
+
+@router.get("/proof-submissions/{item_id}", response_model=AdminProofSubmissionOut)
+def admin_proof_submission_detail(
+    item_id: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    submission = db.scalar(
+        select(UserProofSubmission)
+        .where(UserProofSubmission.id == item_id)
+        .options(
+            selectinload(UserProofSubmission.user),
+            selectinload(UserProofSubmission.lesson),
+            selectinload(UserProofSubmission.overridden_by),
+        )
+    )
+    if not submission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proof submission not found")
+    review_ids = _review_ids_by_proof_submission(db, [submission.id])
+    return _serialize_admin_proof_submission(submission, review_ids.get(submission.id, []))
+
+
+@router.patch("/proof-submissions/{item_id}/override", response_model=AdminProofSubmissionOut)
+def admin_override_proof_submission(
+    item_id: int,
+    payload: AdminProofOverrideRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> dict:
+    submission = db.scalar(
+        select(UserProofSubmission)
+        .where(UserProofSubmission.id == item_id)
+        .options(
+            selectinload(UserProofSubmission.user),
+            selectinload(UserProofSubmission.lesson),
+            selectinload(UserProofSubmission.overridden_by),
+        )
+    )
+    if not submission:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proof submission not found")
+    _apply_admin_override(db, submission, payload, admin)
+    db.commit()
+    db.refresh(submission)
+    review_ids = _review_ids_by_proof_submission(db, [submission.id])
+    return _serialize_admin_proof_submission(submission, review_ids.get(submission.id, []))
 
 
 @router.get("/languages", response_model=list[LanguageOut])
@@ -695,3 +804,278 @@ def _delete(db: Session, item) -> dict[str, str]:
     db.delete(item)
     db.commit()
     return {"status": "deleted"}
+
+
+def _review_ids_by_proof_submission(db: Session, proof_submission_ids: list[int]) -> dict[int, list[int]]:
+    if not proof_submission_ids:
+        return {}
+    rows = db.scalars(
+        select(ReviewItem).where(ReviewItem.proof_submission_id.in_(proof_submission_ids))
+    ).all()
+    output: dict[int, list[int]] = {}
+    for row in rows:
+        if row.proof_submission_id is not None:
+            output.setdefault(row.proof_submission_id, []).append(row.id)
+    return output
+
+
+def _serialize_admin_proof_submission(
+    submission: UserProofSubmission,
+    review_item_ids: list[int],
+) -> dict[str, Any]:
+    return {
+        "id": submission.id,
+        "user": {
+            "id": submission.user.id,
+            "email": submission.user.email,
+            "full_name": submission.user.full_name,
+            "role": submission.user.role.value,
+        },
+        "lesson": {
+            "id": submission.lesson.id,
+            "title": submission.lesson.title,
+            "slug": submission.lesson.slug,
+        },
+        "proof_type": submission.proof_type,
+        "question_id": submission.question_id,
+        "debug_task_id": submission.debug_task_id,
+        "mini_task_id": submission.mini_task_id,
+        "answer_text": submission.answer_text,
+        "code_text": submission.code_text,
+        "status": submission.status,
+        "score_label": submission.score_label,
+        "score_numeric": submission.score_numeric,
+        "feedback_json": submission.feedback_json,
+        "heuristic_status": submission.heuristic_status or submission.status,
+        "heuristic_score_label": submission.heuristic_score_label or submission.score_label,
+        "heuristic_score_numeric": submission.heuristic_score_numeric if submission.heuristic_score_numeric is not None else submission.score_numeric,
+        "heuristic_feedback_json": submission.heuristic_feedback_json or submission.feedback_json,
+        "evaluation_confidence": submission.evaluation_confidence or EvaluationConfidence.medium,
+        "final_evaluation_status": submission.final_evaluation_status or _final_status_from_current_submission(submission),
+        "final_score_label": submission.final_score_label or submission.score_label,
+        "final_score_numeric": submission.final_score_numeric if submission.final_score_numeric is not None else submission.score_numeric,
+        "final_feedback_json": submission.final_feedback_json or submission.feedback_json,
+        "overridden_by_id": submission.overridden_by_id,
+        "overridden_by_email": submission.overridden_by.email if submission.overridden_by else None,
+        "overridden_at": submission.overridden_at,
+        "override_note": submission.override_note,
+        "attempt_number": submission.attempt_number,
+        "created_at": submission.created_at,
+        "evaluated_at": submission.evaluated_at,
+        "created_review_item": bool(review_item_ids),
+        "review_item_ids": review_item_ids,
+    }
+
+
+def _apply_admin_override(
+    db: Session,
+    submission: UserProofSubmission,
+    payload: AdminProofOverrideRequest,
+    admin: User,
+) -> None:
+    final_score_label = payload.score_label or _default_score_label_for_final_status(payload.final_status)
+    final_score_numeric = _score_numeric_for_override(payload.final_status, final_score_label, submission)
+    final_feedback = _feedback_with_admin_override(submission, payload.final_status, payload.override_note)
+
+    submission.final_evaluation_status = payload.final_status
+    submission.final_score_label = final_score_label
+    submission.final_score_numeric = final_score_numeric
+    submission.final_feedback_json = final_feedback
+    submission.overridden_by_id = admin.id
+    submission.overridden_at = datetime.now(timezone.utc)
+    submission.override_note = payload.override_note
+
+    submission.status = _proof_status_for_final_status(payload.final_status, final_score_label)
+    submission.score_label = final_score_label
+    submission.score_numeric = final_score_numeric
+    submission.feedback_json = final_feedback
+    submission.evaluated_at = submission.overridden_at
+
+    if payload.final_status == ProofFinalStatus.accepted:
+        _close_reviews_for_submission(db, submission.id)
+    _sync_progress_for_overridden_submission(db, submission)
+
+
+def _proof_status_for_final_status(
+    final_status: ProofFinalStatus,
+    score_label: ScoreLabel,
+) -> ProofStatus:
+    if final_status == ProofFinalStatus.accepted:
+        return ProofStatus.strong if score_label == ScoreLabel.strong else ProofStatus.passed
+    return ProofStatus.needs_revision
+
+
+def _default_score_label_for_final_status(final_status: ProofFinalStatus) -> ScoreLabel:
+    if final_status == ProofFinalStatus.accepted:
+        return ScoreLabel.stable
+    if final_status == ProofFinalStatus.rejected:
+        return ScoreLabel.incorrect
+    return ScoreLabel.weak
+
+
+def _score_numeric_for_override(
+    final_status: ProofFinalStatus,
+    score_label: ScoreLabel,
+    submission: UserProofSubmission,
+) -> float:
+    if final_status == ProofFinalStatus.accepted:
+        baseline = 0.9 if score_label == ScoreLabel.strong else 0.75
+        return max(submission.score_numeric or 0, baseline)
+    if final_status == ProofFinalStatus.rejected:
+        return min(submission.score_numeric or 0.0, 0.2)
+    return min(submission.score_numeric or 0.6, 0.6)
+
+
+def _feedback_with_admin_override(
+    submission: UserProofSubmission,
+    final_status: ProofFinalStatus,
+    override_note: str,
+) -> dict[str, Any]:
+    original = submission.final_feedback_json or submission.feedback_json or {}
+    return {
+        "correct_points": original.get("correct_points", []),
+        "missing_points": original.get("missing_points", []),
+        "misconceptions": original.get("misconceptions", []),
+        "feedback": f"Admin override set final status to {final_status.value}.",
+        "remedial_question": original.get("remedial_question", "Review the admin note and revise the proof if needed."),
+        "evaluation_source": "admin_override",
+        "override_note": override_note,
+    }
+
+
+def _close_reviews_for_submission(db: Session, proof_submission_id: int) -> None:
+    reviews = db.scalars(
+        select(ReviewItem).where(
+            ReviewItem.proof_submission_id == proof_submission_id,
+            ReviewItem.is_active.is_(True),
+        )
+    ).all()
+    for review in reviews:
+        review.is_active = False
+        review.last_reviewed_at = datetime.now(timezone.utc)
+        review.reason = "Admin override accepted the proof submission."
+
+
+def _sync_progress_for_overridden_submission(db: Session, submission: UserProofSubmission) -> None:
+    progress = get_or_create_progress(db, submission.user_id, submission.lesson_id)
+    latest = _latest_required_submissions_for_progress(db, submission.user_id, submission.lesson_id)
+    explain = latest.get(ProofType.explain_back)
+    debug = latest.get(ProofType.debug_task)
+    mini = latest.get(ProofType.mini_task)
+
+    progress.explain_back_submitted = bool(explain and explain.status in PASSING_STATUSES)
+    progress.explain_back_score = explain.score_numeric if explain and explain.status in PASSING_STATUSES else None
+    progress.debug_task_completed = bool(debug and debug.status in PASSING_STATUSES)
+    progress.mini_task_completed = bool(mini and mini.status in PASSING_STATUSES)
+    progress.review_required = has_latest_failed_proof(db, submission.user, submission.lesson_id) or (
+        progress.quick_check_score is not None and progress.quick_check_score < 0.8
+    )
+    recompute_progress(progress)
+
+
+def _latest_required_submissions_for_progress(
+    db: Session,
+    user_id: int,
+    lesson_id: int,
+) -> dict[ProofType, UserProofSubmission | None]:
+    rows = list(
+        db.scalars(
+            select(UserProofSubmission)
+            .where(
+                UserProofSubmission.user_id == user_id,
+                UserProofSubmission.lesson_id == lesson_id,
+                UserProofSubmission.proof_type.in_(
+                    [ProofType.explain_back, ProofType.debug_task, ProofType.mini_task]
+                ),
+            )
+            .order_by(UserProofSubmission.created_at.desc(), UserProofSubmission.id.desc())
+        )
+    )
+    latest: dict[ProofType, UserProofSubmission | None] = {
+        ProofType.explain_back: None,
+        ProofType.debug_task: None,
+        ProofType.mini_task: None,
+    }
+    for row in rows:
+        if latest[row.proof_type] is None:
+            latest[row.proof_type] = row
+    return latest
+
+
+def _final_status_from_current_submission(submission: UserProofSubmission) -> ProofFinalStatus:
+    if submission.status in PASSING_STATUSES:
+        return ProofFinalStatus.accepted
+    if submission.score_label == ScoreLabel.incorrect:
+        return ProofFinalStatus.rejected
+    return ProofFinalStatus.needs_review
+
+
+def _build_proof_evaluation_analytics(submissions: list[UserProofSubmission]) -> dict[str, Any]:
+    total = len(submissions)
+    count_by_proof_type = _count_values([item.proof_type.value for item in submissions])
+    count_by_final_status = _count_values([
+        (item.final_evaluation_status or _final_status_from_current_submission(item)).value
+        for item in submissions
+    ])
+    count_by_heuristic_status = _count_values([
+        (item.heuristic_status or item.status).value
+        for item in submissions
+    ])
+    count_by_confidence = _count_values([
+        (item.evaluation_confidence or EvaluationConfidence.medium).value
+        for item in submissions
+    ])
+    count_by_score_label = _count_values([
+        (item.final_score_label or item.score_label).value
+        for item in submissions
+        if item.final_score_label or item.score_label
+    ])
+    override_count = sum(1 for item in submissions if item.overridden_by_id is not None)
+
+    lesson_counts: dict[int, dict[str, int | str]] = {}
+    for item in submissions:
+        final_status = item.final_evaluation_status or _final_status_from_current_submission(item)
+        if final_status not in {ProofFinalStatus.rejected, ProofFinalStatus.needs_review}:
+            continue
+        lesson_counts.setdefault(
+            item.lesson_id,
+            {
+                "lesson_id": item.lesson_id,
+                "lesson_title": item.lesson.title if item.lesson else "Unknown lesson",
+                "count": 0,
+            },
+        )
+        lesson_counts[item.lesson_id]["count"] = int(lesson_counts[item.lesson_id]["count"]) + 1
+
+    misconception_counts: dict[str, int] = {}
+    for item in submissions:
+        feedback = item.heuristic_feedback_json or item.feedback_json or {}
+        for misconception in feedback.get("misconceptions", []) or []:
+            misconception_counts[str(misconception)] = misconception_counts.get(str(misconception), 0) + 1
+
+    return {
+        "total_submissions": total,
+        "count_by_proof_type": count_by_proof_type,
+        "count_by_final_status": count_by_final_status,
+        "count_by_heuristic_status": count_by_heuristic_status,
+        "count_by_confidence": count_by_confidence,
+        "count_by_score_label": count_by_score_label,
+        "override_count": override_count,
+        "override_rate": round(override_count / total, 2) if total else 0.0,
+        "top_lessons_with_rejected_or_needs_review": sorted(
+            lesson_counts.values(),
+            key=lambda item: int(item["count"]),
+            reverse=True,
+        )[:5],
+        "top_misconceptions": [
+            {"misconception": key, "count": value}
+            for key, value in sorted(misconception_counts.items(), key=lambda item: item[1], reverse=True)[:5]
+        ],
+    }
+
+
+def _count_values(values: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return counts

@@ -3,7 +3,15 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import LessonStatus, ProofStatus, ProofType, ScoreLabel, SkillStrength
+from app.models.enums import (
+    EvaluationConfidence,
+    LessonStatus,
+    ProofFinalStatus,
+    ProofStatus,
+    ProofType,
+    ScoreLabel,
+    SkillStrength,
+)
 from app.schemas.learning import LessonProgressOut, LessonSummaryOut
 
 
@@ -84,10 +92,12 @@ class ProofSubmissionRequest(BaseModel):
 
 
 class ProofFeedbackOut(BaseModel):
-    correct_points: list[str]
-    missing_points: list[str]
+    correct_points: list[str] = Field(default_factory=list)
+    missing_points: list[str] = Field(default_factory=list)
+    misconceptions: list[str] = Field(default_factory=list)
     feedback: str
     remedial_question: str
+    evaluation_source: str = "heuristic"
 
 
 class ProofSubmissionOut(BaseModel):
@@ -104,11 +114,93 @@ class ProofSubmissionOut(BaseModel):
     score_label: ScoreLabel | None = None
     score_numeric: float | None = None
     feedback_json: ProofFeedbackOut | None = None
+    heuristic_status: ProofStatus | None = None
+    heuristic_score_label: ScoreLabel | None = None
+    heuristic_score_numeric: float | None = None
+    heuristic_feedback_json: ProofFeedbackOut | None = None
+    evaluation_confidence: EvaluationConfidence | None = None
+    final_evaluation_status: ProofFinalStatus | None = None
+    final_score_label: ScoreLabel | None = None
+    final_score_numeric: float | None = None
+    final_feedback_json: ProofFeedbackOut | None = None
+    overridden_by_id: int | None = None
+    overridden_at: datetime | None = None
+    override_note: str | None = None
     attempt_number: int
     created_at: datetime
     evaluated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AdminProofUserOut(BaseModel):
+    id: int
+    email: str
+    full_name: str
+    role: str
+
+    model_config = {"from_attributes": True}
+
+
+class AdminProofLessonOut(BaseModel):
+    id: int
+    title: str
+    slug: str
+
+    model_config = {"from_attributes": True}
+
+
+class AdminProofSubmissionOut(BaseModel):
+    id: int
+    user: AdminProofUserOut
+    lesson: AdminProofLessonOut
+    proof_type: ProofType
+    question_id: int | None = None
+    debug_task_id: int | None = None
+    mini_task_id: int | None = None
+    answer_text: str | None = None
+    code_text: str | None = None
+    status: ProofStatus
+    score_label: ScoreLabel | None = None
+    score_numeric: float | None = None
+    feedback_json: ProofFeedbackOut | None = None
+    heuristic_status: ProofStatus | None = None
+    heuristic_score_label: ScoreLabel | None = None
+    heuristic_score_numeric: float | None = None
+    heuristic_feedback_json: ProofFeedbackOut | None = None
+    evaluation_confidence: EvaluationConfidence | None = None
+    final_evaluation_status: ProofFinalStatus | None = None
+    final_score_label: ScoreLabel | None = None
+    final_score_numeric: float | None = None
+    final_feedback_json: ProofFeedbackOut | None = None
+    overridden_by_id: int | None = None
+    overridden_by_email: str | None = None
+    overridden_at: datetime | None = None
+    override_note: str | None = None
+    attempt_number: int
+    created_at: datetime
+    evaluated_at: datetime | None = None
+    created_review_item: bool
+    review_item_ids: list[int] = Field(default_factory=list)
+
+
+class AdminProofOverrideRequest(BaseModel):
+    final_status: ProofFinalStatus
+    override_note: str = Field(min_length=1, max_length=1000)
+    score_label: ScoreLabel | None = None
+
+
+class ProofEvaluationAnalyticsOut(BaseModel):
+    total_submissions: int
+    count_by_proof_type: dict[str, int]
+    count_by_final_status: dict[str, int]
+    count_by_heuristic_status: dict[str, int]
+    count_by_confidence: dict[str, int]
+    count_by_score_label: dict[str, int]
+    override_count: int
+    override_rate: float
+    top_lessons_with_rejected_or_needs_review: list[dict[str, int | str]]
+    top_misconceptions: list[dict[str, int | str]]
 
 
 class ProofSubmissionResponse(BaseModel):
@@ -128,6 +220,7 @@ class ReviewSubmissionResponse(BaseModel):
     status: ProofStatus
     score_label: ScoreLabel
     score_numeric: float
+    evaluation_confidence: EvaluationConfidence
     feedback_json: ProofFeedbackOut
     progress: LessonProgressOut | None = None
     next_due_for_review: datetime | None = None

@@ -193,6 +193,31 @@ GET /lessons/{lesson_id}/proofs
 
 Evaluation is heuristic only for now. No AI grading is used. A proof only counts toward mastery when its status is `passed` or `strong`; weak proofs create review work and keep the lesson in review until repaired.
 
+The heuristic evaluator checks more than keyword presence:
+
+- meaningful answer length
+- expected concept coverage
+- repeated spam text and repeated words
+- answer specificity and backend consequence
+- required structure for debug proofs: bug, cause, and fix
+- acceptance criteria connection for mini tasks
+- code presence when a mini task asks for code
+- generic reflection answers such as `I understand`
+- obvious misconception patterns such as treating `print` and `return` as interchangeable
+
+Normalized proof feedback uses:
+
+```json
+{
+  "correct_points": [],
+  "missing_points": [],
+  "misconceptions": [],
+  "feedback": "Human-readable repair feedback.",
+  "remedial_question": "Small next question.",
+  "evaluation_source": "heuristic"
+}
+```
+
 Mastery requires:
 
 - reading completed
@@ -234,6 +259,81 @@ Review evaluation is heuristic only:
 - mini task review: expects a solution/code plus a short explanation
 
 If review passes, the weak proof can be repaired, concept mastery moves forward, `review_required` can clear, and lesson mastery is recomputed. If review fails, the item stays active, `review_count` increases, and the next due date is scheduled for tomorrow.
+
+## Admin Proof Inspection
+
+Admins can inspect proof submissions for debugging rubric behavior and reviewing learner progress.
+
+List submissions:
+
+```bash
+GET /admin/proof-submissions
+```
+
+Optional filters:
+
+- `user_id`
+- `lesson_id`
+- `proof_type`
+- `status`
+- `score_label`
+
+Detail:
+
+```bash
+GET /admin/proof-submissions/{id}
+```
+
+The admin response includes user, lesson, proof type, answer/code text, score, normalized feedback JSON, attempt number, timestamps, and whether the proof created review items. The frontend admin page includes a simple Proof Submissions panel with filters and a detail view.
+
+## Evaluation Quality & Audit V1
+
+Proof evaluation remains deterministic and heuristic-only. The app does not call Groq, OpenAI, Gemini, OpenRouter, or any external AI provider.
+
+Each proof submission now stores both the original heuristic evaluation and the final evaluation used by the product:
+
+- heuristic status, score label, score number, and feedback JSON
+- evaluation confidence: `low`, `medium`, or `high`
+- final evaluation status: `accepted`, `rejected`, or `needs_review`
+- final score label, score number, and feedback JSON
+- admin override metadata when present: admin user, timestamp, and override note
+
+Low-confidence or borderline heuristic results are kept visible to admins. Ambiguous weak answers are marked `needs_review` as the final evaluation status, while obvious empty/incorrect submissions can be marked `rejected`.
+
+Admin override:
+
+```bash
+PATCH /admin/proof-submissions/{id}/override
+```
+
+Payload:
+
+```json
+{
+  "final_status": "accepted",
+  "score_label": "stable",
+  "override_note": "Manual review accepted this answer for the current rubric."
+}
+```
+
+The override updates the final result and compatibility progress fields, but preserves the original heuristic snapshot for audit. If an accepted override repairs an active review item, the related review can be closed and lesson progress is recomputed.
+
+Evaluation analytics:
+
+```bash
+GET /admin/proof-evaluation-analytics
+```
+
+The analytics endpoint returns total submissions, counts by proof type, final status, heuristic status, confidence, score label, override count/rate, top lessons with rejected or needs-review proofs, and top misconceptions found in feedback JSON.
+
+Migration:
+
+```bash
+cd backend
+python -m alembic upgrade head
+```
+
+This applies `0005_evaluation_audit.py`, which adds audit/final evaluation fields to `user_proof_submissions` and backfills existing submissions from their current heuristic result.
 
 ## Seed Accounts
 
